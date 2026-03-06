@@ -56,43 +56,57 @@
     font-size: 0.9rem;
 }
 
-.resultCard,
-.favoriteCard {
+.searchForm {
     display: flex;
     align-items: center;
     gap: var(--constant-padding);
+}
+
+.searchInput {
+    flex-grow: 1;
+    max-width: 280px;
+}
+
+.storeCard {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     background-color: var(--color-background-card);
     border: 1px solid var(--color-border);
     border-radius: 12px;
-    padding: var(--default-padding);
-}
-
-.resultLink {
-    flex-grow: 1;
-    text-align: left;
-    background: none;
-    border: none;
-    padding: 0;
+    padding: var(--default-padding) calc(var(--default-padding) + 2.5rem) var(--default-padding) var(--default-padding);
+    text-decoration: none;
     color: var(--color-text);
-    cursor: pointer;
+    transition: border-color 0.15s, background-color 0.15s;
 
     &:hover {
-        color: var(--color-theme);
-        background: none;
+        border-color: var(--color-theme);
+        background-color: var(--color-background-raised);
+        color: var(--color-text);
     }
 }
 
 .favoriteButton {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
-    font-size: 1.25rem;
+    border-radius: 0 12px 12px 0;
+    font-size: 1.3rem;
     cursor: pointer;
-    padding: 0.25em;
     color: var(--color-text-muted);
+    transition: color 0.15s, background-color 0.15s;
 
     &:hover {
         color: var(--color-theme);
-        background: none;
+        background-color: var(--color-background-raised);
     }
 }
 

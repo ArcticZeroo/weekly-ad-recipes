@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { PromiseStage, useDelayedPromiseState } from '@arcticzeroo/react-promise-hook';
 import { searchLocations, type IFlippStoreMatch } from '../../api/client.ts';
 import {
@@ -12,11 +12,21 @@ import { Skeleton } from '../common/skeleton.tsx';
 import { ErrorCard } from '../common/error-card.tsx';
 import styles from './home-page.module.scss';
 
+const CHAIN_DISPLAY_NAMES: Record<string, string> = {
+    'qfc': 'QFC',
+    'safeway': 'Safeway',
+    'fred-meyer': 'Fred Meyer',
+    'whole-foods': 'Whole Foods',
+};
+
+const displayChainName = (chainId: string): string => {
+    return CHAIN_DISPLAY_NAMES[chainId] ?? chainId;
+};
+
 const HomePage: React.FC = () => {
     const [zipCode, setZipCode] = useState('');
     const [favorites, setFavorites] = useState<IFavoriteLocation[]>(getFavoriteLocations);
     const [searchedZip, setSearchedZip] = useState('');
-    const navigate = useNavigate();
 
     const searchCallback = useCallback(
         () => searchLocations(zipCode),
@@ -33,27 +43,19 @@ const HomePage: React.FC = () => {
         setSearchedZip(zipCode.trim());
     };
 
-    const handleNavigate = (chainId: string, zip: string) => {
-        navigate(`/${chainId}/${zip}/deals`);
-    };
+    const handleToggleFavorite = (event: React.MouseEvent, chainId: string, zip: string) => {
+        event.preventDefault();
+        event.stopPropagation();
 
-    const handleToggleFavorite = (match: IFlippStoreMatch) => {
         const isFavorited = favorites.some(
-            (favorite) => favorite.chainId === match.chain_id && favorite.zipCode === searchedZip,
+            (favorite) => favorite.chainId === chainId && favorite.zipCode === zip,
         );
 
         if (isFavorited) {
-            const updated = removeFavoriteLocation(match.chain_id, searchedZip);
-            setFavorites(updated);
+            setFavorites(removeFavoriteLocation(chainId, zip));
         } else {
-            const updated = addFavoriteLocation(match.chain_id, searchedZip);
-            setFavorites(updated);
+            setFavorites(addFavoriteLocation(chainId, zip));
         }
-    };
-
-    const handleRemoveFavorite = (favorite: IFavoriteLocation) => {
-        const updated = removeFavoriteLocation(favorite.chainId, favorite.zipCode);
-        setFavorites(updated);
     };
 
     const isMatchFavorited = (match: IFlippStoreMatch): boolean => {
@@ -102,23 +104,22 @@ const HomePage: React.FC = () => {
                     <h2 className={styles.sectionTitle}>Stores near {searchedZip}</h2>
                     <div className={styles.grid}>
                         {searchResponse.value.map((match) => (
-                            <div key={match.chain_id} className={styles.resultCard}>
-                                <button
-                                    className={styles.resultLink}
-                                    onClick={() => handleNavigate(match.chain_id, searchedZip)}
-                                >
-                                    <span className={styles.locationName}>
-                                        {match.chain_name}
-                                    </span>
-                                </button>
+                            <Link
+                                key={match.chain_id}
+                                to={`/${match.chain_id}/${searchedZip}/deals`}
+                                className={styles.storeCard}
+                            >
+                                <span className={styles.locationName}>
+                                    {match.chain_name}
+                                </span>
                                 <button
                                     className={`${styles.favoriteButton} ${isMatchFavorited(match) ? styles.favorited : ''}`}
-                                    onClick={() => handleToggleFavorite(match)}
+                                    onClick={(event) => handleToggleFavorite(event, match.chain_id, searchedZip)}
                                     title={isMatchFavorited(match) ? 'Remove from favorites' : 'Add to favorites'}
                                 >
                                     {isMatchFavorited(match) ? '★' : '☆'}
                                 </button>
-                            </div>
+                            </Link>
                         ))}
                     </div>
                 </div>
@@ -133,23 +134,22 @@ const HomePage: React.FC = () => {
                     <h2 className={styles.sectionTitle}>Your Stores</h2>
                     <div className={styles.grid}>
                         {favorites.map((favorite) => (
-                            <div key={`${favorite.chainId}-${favorite.zipCode}`} className={styles.favoriteCard}>
-                                <button
-                                    className={styles.resultLink}
-                                    onClick={() => handleNavigate(favorite.chainId, favorite.zipCode)}
-                                >
-                                    <span className={styles.locationName}>
-                                        {favorite.chainId} - {favorite.zipCode}
-                                    </span>
-                                </button>
+                            <Link
+                                key={`${favorite.chainId}-${favorite.zipCode}`}
+                                to={`/${favorite.chainId}/${favorite.zipCode}/deals`}
+                                className={styles.storeCard}
+                            >
+                                <span className={styles.locationName}>
+                                    {displayChainName(favorite.chainId)} — {favorite.zipCode}
+                                </span>
                                 <button
                                     className={`${styles.favoriteButton} ${styles.favorited}`}
-                                    onClick={() => handleRemoveFavorite(favorite)}
+                                    onClick={(event) => handleToggleFavorite(event, favorite.chainId, favorite.zipCode)}
                                     title="Remove from favorites"
                                 >
                                     ★
                                 </button>
-                            </div>
+                            </Link>
                         ))}
                     </div>
                 </div>
