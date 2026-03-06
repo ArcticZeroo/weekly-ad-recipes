@@ -1,0 +1,167 @@
+@use 'variables' as *;
+
+:root {
+    --color-background: #{$color-background};
+    --color-background-raised: #{$color-background-raised};
+    --color-background-card: #{$color-background-card};
+    --color-background-input: #{$color-background-input};
+    --color-text: #{$color-text};
+    --color-text-muted: #{$color-text-muted};
+    --color-theme: #{$color-theme};
+    --color-theme-hover: #{$color-theme-hover};
+    --color-error: #{$color-error};
+    --color-error-background: #{$color-error-background};
+    --color-success: #{$color-success};
+    --color-border: #{$color-border};
+
+    --default-padding: 1.5rem;
+    --constant-padding: 0.5rem;
+
+    --z-nav: #{$z-nav};
+    --z-modal-overlay: #{$z-modal-overlay};
+    --z-modal: #{$z-modal};
+    --z-toast: #{$z-toast};
+
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.5;
+    font-weight: 400;
+    color: var(--color-text);
+    background-color: var(--color-background);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+
+    @media (max-width: $breakpoint-large) {
+        --default-padding: 1.25rem;
+    }
+
+    @media (max-width: $breakpoint-medium) {
+        --default-padding: 1rem;
+    }
+
+    @media (max-width: $breakpoint-small) {
+        --default-padding: 0.75rem;
+    }
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+}
+
+#root {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+a {
+    color: var(--color-theme);
+    text-decoration: none;
+
+    &:hover {
+        color: var(--color-theme-hover);
+    }
+}
+
+button {
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    padding: 0.5em 1em;
+    font-size: 1em;
+    font-weight: 500;
+    font-family: inherit;
+    color: var(--color-text);
+    background-color: var(--color-background-card);
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+
+    &:hover {
+        border-color: var(--color-theme);
+        background-color: var(--color-background-raised);
+    }
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+}
+
+input, select {
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    padding: 0.5em 0.75em;
+    font-size: 1em;
+    font-family: inherit;
+    color: var(--color-text);
+    background-color: var(--color-background-input);
+
+    &:focus {
+        outline: 2px solid var(--color-theme);
+        outline-offset: -1px;
+    }
+}
+
+// Flex utility classes
+.flex {
+    display: flex;
+    align-items: center;
+    gap: var(--default-padding);
+}
+
+.flex-col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--default-padding);
+}
+
+.flex-center {
+    align-items: center;
+    justify-content: center;
+}
+
+.flex-wrap {
+    flex-wrap: wrap;
+}
+
+.flex-between {
+    justify-content: space-between;
+}
+
+.flex-grow {
+    flex-grow: 1;
+}
+
+// Card system
+.card {
+    background-color: var(--color-background-card);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: var(--default-padding);
+
+    &.error {
+        background-color: var(--color-error-background);
+        border-color: var(--color-error);
+        color: var(--color-error);
+        display: flex;
+        flex-direction: column;
+        gap: var(--constant-padding);
+        align-items: flex-start;
+
+        button {
+            color: var(--color-text);
+            border-color: var(--color-error);
+
+            &:hover {
+                background-color: var(--color-error-background);
+            }
+        }
+    }
+}

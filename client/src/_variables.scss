@@ -1,0 +1,25 @@
+// Colors
+$color-background: #1a1a2e;
+$color-background-raised: #25253e;
+$color-background-card: #2d2d4a;
+$color-background-input: #1e1e36;
+$color-text: #e0e0e8;
+$color-text-muted: #9090a8;
+$color-theme: #4a7dff;
+$color-theme-hover: #6090ff;
+$color-error: #ff4d4d;
+$color-error-background: #3a1a1a;
+$color-success: #4dff88;
+$color-border: #3a3a5a;
+
+// Breakpoints
+$breakpoint-large: 1200px;
+$breakpoint-medium: 900px;
+$breakpoint-small: 600px;
+$breakpoint-mobile: 800px;
+
+// Z-index layers
+$z-nav: 100;
+$z-modal-overlay: 200;
+$z-modal: 300;
+$z-toast: 400;

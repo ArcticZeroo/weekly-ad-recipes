@@ -1,0 +1,37 @@
+@use '../../variables' as *;
+
+.navBar {
+    display: flex;
+    align-items: center;
+    gap: var(--default-padding);
+    padding: var(--constant-padding) var(--default-padding);
+    background-color: var(--color-background-raised);
+    border-bottom: 1px solid var(--color-border);
+    position: sticky;
+    top: 0;
+    z-index: $z-nav;
+}
+
+.title {
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: var(--color-text);
+    margin-right: auto;
+}
+
+.link {
+    color: var(--color-text-muted);
+    text-decoration: none;
+    padding: var(--constant-padding);
+    border-radius: 6px;
+    transition: color 0.2s, background-color 0.2s;
+
+    &:hover {
+        color: var(--color-text);
+        background-color: var(--color-background-card);
+    }
+}
+
+.activeLink {
+    color: var(--color-theme);
+}
