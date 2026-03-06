@@ -9,6 +9,7 @@ mod routes;
 use axum::routing::{delete, get, post};
 use axum::Router;
 use tower_http::cors::CorsLayer;
+use tower_http::services::{ServeDir, ServeFile};
 
 use crate::ai::client::AnthropicClient;
 
@@ -57,6 +58,10 @@ async fn main() {
             post(routes::deals::refresh_deals),
         )
         .route("/api/meals/:location_id", get(routes::meals::get_meals))
+        .fallback_service(
+            ServeDir::new("../client/dist")
+                .not_found_service(ServeFile::new("../client/dist/index.html")),
+        )
         .layer(CorsLayer::permissive())
         .with_state(state);
 
