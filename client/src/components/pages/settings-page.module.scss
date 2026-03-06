@@ -92,6 +92,13 @@
     }
 }
 
+.addedLabel {
+    color: var(--color-success);
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 .removeButton {
     color: var(--color-error);
     border-color: var(--color-error);

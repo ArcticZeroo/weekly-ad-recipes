@@ -50,7 +50,16 @@ pub async fn create_location(
         req.weekly_ad_url,
     )
     .execute(pool)
-    .await?;
+    .await
+    .map_err(|err| match &err {
+        sqlx::Error::Database(db_err) if db_err.message().contains("UNIQUE") => {
+            AppError::BadRequest(format!(
+                "A {} location for zip {} already exists",
+                req.chain_id, req.zip_code
+            ))
+        }
+        _ => AppError::Database(err),
+    })?;
 
     get_location(pool, result.last_insert_rowid()).await
 }

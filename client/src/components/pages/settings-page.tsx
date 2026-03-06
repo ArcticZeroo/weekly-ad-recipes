@@ -106,26 +106,36 @@ const SettingsPage: React.FC = () => {
                         {searchResponse.value.length === 0 ? (
                             <p className={styles.emptyMessage}>No stores found for this zip code.</p>
                         ) : (
-                            searchResponse.value.map((match, index) => (
-                                <div key={`${match.chain_id}-${match.flyer_id}`} className={styles.resultCard}>
-                                    <div className={styles.resultInfo}>
-                                        <span className={styles.resultName}>
-                                            {match.chain_name}
-                                            {match.store_name && ` — ${match.store_name}`}
-                                        </span>
-                                        <span className={styles.resultMeta}>
-                                            {formatDateRange(match.valid_from, match.valid_to)}
-                                        </span>
+                            searchResponse.value.map((match, index) => {
+                                const alreadyAdded = locationsResponse.value?.some(
+                                    (location) => location.chain_id === match.chain_id && location.zip_code === zipCode.trim(),
+                                ) ?? false;
+
+                                return (
+                                    <div key={`${match.chain_id}-${match.flyer_id}`} className={styles.resultCard}>
+                                        <div className={styles.resultInfo}>
+                                            <span className={styles.resultName}>
+                                                {match.chain_name}
+                                                {match.store_name && ` — ${match.store_name}`}
+                                            </span>
+                                            <span className={styles.resultMeta}>
+                                                {formatDateRange(match.valid_from, match.valid_to)}
+                                            </span>
+                                        </div>
+                                        {alreadyAdded ? (
+                                            <span className={styles.addedLabel}>Added ✓</span>
+                                        ) : (
+                                            <button
+                                                className={styles.addButton}
+                                                onClick={() => handleAddLocation(match, index)}
+                                                disabled={addingMatchIndex !== null}
+                                            >
+                                                {addingMatchIndex === index ? 'Adding...' : 'Add'}
+                                            </button>
+                                        )}
                                     </div>
-                                    <button
-                                        className={styles.addButton}
-                                        onClick={() => handleAddLocation(match, index)}
-                                        disabled={addingMatchIndex !== null}
-                                    >
-                                        {addingMatchIndex === index ? 'Adding...' : 'Add'}
-                                    </button>
-                                </div>
-                            ))
+                                );
+                            })
                         )}
                     </div>
                 )}
