@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!\", chain_id, name, address, zip_code,\n           flipp_merchant_id, flipp_merchant_name, weekly_ad_url, created_at\n           FROM store_locations WHERE chain_id = ? AND zip_code = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "chain_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "address",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "zip_code",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "flipp_merchant_id",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "flipp_merchant_name",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "weekly_ad_url",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "2bf23642e3d7539033b54b11498905f0e22d7b2c4431d00a9d332f23fe0ea4aa"
+}

@@ -33,6 +33,25 @@ pub async fn get_location(pool: &SqlitePool, id: i64) -> Result<StoreLocation, A
     .ok_or_else(|| AppError::NotFound(format!("Location {id} not found")))
 }
 
+pub async fn find_location_by_chain_zip(
+    pool: &SqlitePool,
+    chain_id: &str,
+    zip_code: &str,
+) -> Result<Option<StoreLocation>, AppError> {
+    let location = sqlx::query_as!(
+        StoreLocation,
+        r#"SELECT id as "id!", chain_id, name, address, zip_code,
+           flipp_merchant_id, flipp_merchant_name, weekly_ad_url, created_at
+           FROM store_locations WHERE chain_id = ? AND zip_code = ?"#,
+        chain_id,
+        zip_code
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(location)
+}
+
 pub async fn create_location(
     pool: &SqlitePool,
     req: &CreateLocationRequest,
@@ -62,26 +81,6 @@ pub async fn create_location(
     })?;
 
     get_location(pool, result.last_insert_rowid()).await
-}
-
-pub async fn delete_location(pool: &SqlitePool, id: i64) -> Result<(), AppError> {
-    // Delete cascaded data first
-    sqlx::query!("DELETE FROM deals WHERE location_id = ?", id)
-        .execute(pool)
-        .await?;
-    sqlx::query!("DELETE FROM meal_ideas WHERE location_id = ?", id)
-        .execute(pool)
-        .await?;
-
-    let result = sqlx::query!("DELETE FROM store_locations WHERE id = ?", id)
-        .execute(pool)
-        .await?;
-
-    if result.rows_affected() == 0 {
-        return Err(AppError::NotFound(format!("Location {id} not found")));
-    }
-
-    Ok(())
 }
 
 // ---- Deals ----

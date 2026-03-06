@@ -4,7 +4,6 @@ import { SelectedLocationContext, selectedLocationNotifier } from '../context/lo
 import HomePage from './pages/home-page.tsx';
 import DealsPage from './pages/deals-page.tsx';
 import MealsPage from './pages/meals-page.tsx';
-import SettingsPage from './pages/settings-page.tsx';
 
 export const App: React.FC = () => {
     return (
@@ -15,7 +14,6 @@ export const App: React.FC = () => {
                     <Route path="/" element={<HomePage />} />
                     <Route path="/:locationId/deals" element={<DealsPage />} />
                     <Route path="/:locationId/meals" element={<MealsPage />} />
-                    <Route path="/settings" element={<SettingsPage />} />
                 </Routes>
             </main>
         </SelectedLocationContext.Provider>

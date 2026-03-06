@@ -30,56 +30,24 @@ export const fetchChains = async (): Promise<StoreChain[]> => {
     return fetchJson<StoreChain[]>('/api/chains');
 };
 
-// Store locations — cached in memory to avoid re-fetch on every navigation
-let locationsCache: StoreLocation[] | null = null;
-
-export const fetchLocations = async (): Promise<StoreLocation[]> => {
-    const fresh = await fetchJson<StoreLocation[]>('/api/locations');
-    locationsCache = fresh;
-    return fresh;
-};
-
-export const getCachedLocations = (): StoreLocation[] | null => locationsCache;
-
-export const invalidateLocationsCache = (): void => {
-    locationsCache = null;
-};
-
-export interface IAddLocationRequest {
-    chain_id: string;
-    name: string;
-    address?: string;
-    zip_code: string;
-    flipp_merchant_id?: number;
-    flipp_merchant_name?: string;
-    weekly_ad_url?: string;
-}
-
-export const addLocation = async (location: IAddLocationRequest): Promise<StoreLocation> => {
-    const result = await fetchJson<StoreLocation>('/api/locations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(location),
-    });
-    invalidateLocationsCache();
-    return result;
-};
-
-export const deleteLocation = async (locationId: number): Promise<void> => {
-    const response = await fetch(`/api/locations/${locationId}`, {
-        method: 'DELETE',
-    });
-
-    if (!response.ok) {
-        const text = await response.text().catch(() => response.statusText);
-        throw new Error(`Request failed (${response.status}): ${text}`);
-    }
-
-    invalidateLocationsCache();
-};
-
+// Search for stores by zip (lightweight, no DB writes)
 export const searchLocations = async (zipCode: string): Promise<IFlippStoreMatch[]> => {
     return fetchJson<IFlippStoreMatch[]>(`/api/locations/search?zip=${encodeURIComponent(zipCode)}`);
+};
+
+// Resolve a store match into a stable StoreLocation with an ID (creates in DB if needed)
+export const resolveLocation = async (match: IFlippStoreMatch, zipCode: string): Promise<StoreLocation> => {
+    return fetchJson<StoreLocation>('/api/locations/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            chain_id: match.chain_id,
+            chain_name: match.chain_name,
+            zip_code: zipCode,
+            flipp_merchant_id: match.merchant_id,
+            flipp_merchant_name: match.merchant_name,
+        }),
+    });
 };
 
 // Deals

@@ -6,7 +6,7 @@ mod fetcher;
 mod models;
 mod routes;
 
-use axum::routing::{delete, get, post};
+use axum::routing::{get, post};
 use axum::Router;
 use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
@@ -43,14 +43,13 @@ async fn main() {
         .route("/api/health", get(health))
         .route("/api/chains", get(routes::chains::list_chains))
         .route("/api/locations", get(routes::locations::list_locations))
-        .route("/api/locations", post(routes::locations::create_location))
-        .route(
-            "/api/locations/:id",
-            delete(routes::locations::delete_location),
-        )
         .route(
             "/api/locations/search",
             get(routes::locations::search_locations),
+        )
+        .route(
+            "/api/locations/resolve",
+            post(routes::locations::resolve_location),
         )
         .route("/api/deals/:location_id", get(routes::deals::get_deals))
         .route(
