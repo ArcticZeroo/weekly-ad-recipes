@@ -27,14 +27,14 @@ pub async fn search_locations(
     let client = reqwest::Client::new();
     let mut matches = flipp::search_flyers_by_zip(&client, &query.zip).await?;
 
-    // Whole Foods uses Vision instead of Flipp — always available
+    // Whole Foods uses structured scraping instead of Flipp
     matches.push(flipp::FlippStoreMatch {
         chain_id: "whole-foods".to_string(),
         chain_name: "Whole Foods".to_string(),
         flyer_id: None,
         merchant_id: None,
         merchant_name: "Whole Foods Market".to_string(),
-        store_name: None,
+        store_name: Some("Redmond".to_string()),
         valid_from: None,
         valid_to: None,
     });
@@ -64,6 +64,14 @@ pub async fn resolve_location(
         return Ok(Json(existing));
     }
 
+    // For Whole Foods, set the weekly_ad_url with the hardcoded store ID
+    let weekly_ad_url = if req.chain_id == "whole-foods" {
+        // TODO: Look up WFM store ID dynamically based on zip
+        Some("https://www.wholefoodsmarket.com/sales-flyer?store-id=10260".to_string())
+    } else {
+        None
+    };
+
     let create_req = CreateLocationRequest {
         chain_id: req.chain_id.clone(),
         name: format!("{} - {}", req.chain_name, req.zip_code),
@@ -71,7 +79,7 @@ pub async fn resolve_location(
         zip_code: req.zip_code,
         flipp_merchant_id: req.flipp_merchant_id,
         flipp_merchant_name: req.flipp_merchant_name,
-        weekly_ad_url: None,
+        weekly_ad_url,
     };
 
     let location = queries::create_location(&state.pool, &create_req).await?;

@@ -3,7 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import { PromiseStage, useImmediatePromiseState } from '@arcticzeroo/react-promise-hook';
 import { fetchMeals } from '../../api/client.ts';
 import { formatWeekId } from '../../util/week.ts';
-import { LoadingSpinner } from '../common/loading-spinner.tsx';
+import { LoadingCard } from '../common/loading-card.tsx';
+import { Skeleton } from '../common/skeleton.tsx';
 import { ErrorCard } from '../common/error-card.tsx';
 import styles from './meals-page.module.scss';
 
@@ -23,7 +24,26 @@ const MealsPage: React.FC = () => {
     }
 
     if (response.value == null) {
-        return <LoadingSpinner />;
+        return (
+            <div className={`${styles.page} flex-col`}>
+                <h1>Meal Ideas</h1>
+                <div className={styles.mealsGrid}>
+                    {Array.from({ length: 3 }).map((_, index) => (
+                        <div key={index} className={styles.mealCard}>
+                            <Skeleton height="1.2rem" width="70%" />
+                            <Skeleton height="3rem" />
+                            <Skeleton height="0.8rem" width="40%" />
+                            <div className="flex flex-wrap">
+                                <Skeleton height="1.5rem" width="4rem" borderRadius="6px" />
+                                <Skeleton height="1.5rem" width="5rem" borderRadius="6px" />
+                                <Skeleton height="1.5rem" width="3.5rem" borderRadius="6px" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <LoadingCard message="Generating meal ideas from this week's deals..." />
+            </div>
+        );
     }
 
     const { meals, week_id: weekId, cached } = response.value;

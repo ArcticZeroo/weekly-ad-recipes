@@ -5,7 +5,8 @@ import { fetchDeals, refreshDeals } from '../../api/client.ts';
 import type { Deal } from '../../models/generated/Deal.ts';
 import type { DealsResponse } from '../../models/generated/DealsResponse.ts';
 import { formatWeekId } from '../../util/week.ts';
-import { LoadingSpinner } from '../common/loading-spinner.tsx';
+import { LoadingCard } from '../common/loading-card.tsx';
+import { Skeleton } from '../common/skeleton.tsx';
 import { ErrorCard } from '../common/error-card.tsx';
 import styles from './deals-page.module.scss';
 
@@ -40,6 +41,7 @@ const DealsPage: React.FC = () => {
     const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const tabBarRef = useRef<HTMLDivElement>(null);
     const isScrollingFromClick = useRef(false);
+    const [loadingElapsed, setLoadingElapsed] = useState(false);
 
     const retrieveDeals = useCallback(
         () => fetchDeals(parsedLocationId),
@@ -48,6 +50,16 @@ const DealsPage: React.FC = () => {
 
     const response = useImmediatePromiseState(retrieveDeals);
     const dealsData = refreshedData ?? response.value;
+
+    useEffect(() => {
+        if (dealsData != null) {
+            setLoadingElapsed(false);
+            return;
+        }
+
+        const timer = setTimeout(() => setLoadingElapsed(true), 3000);
+        return () => clearTimeout(timer);
+    }, [dealsData]);
 
     const groupedDeals = useMemo(() => {
         if (dealsData == null) {
@@ -128,7 +140,28 @@ const DealsPage: React.FC = () => {
     }
 
     if (dealsData == null) {
-        return <LoadingSpinner />;
+        return (
+            <div className={`${styles.page} flex-col`}>
+                <div className={styles.tabBar}>
+                    {Array.from({ length: 4 }).map((_, index) => (
+                        <Skeleton key={index} height="2rem" width="5rem" borderRadius="8px" />
+                    ))}
+                </div>
+                <div className={styles.dealsGrid}>
+                    {Array.from({ length: 6 }).map((_, index) => (
+                        <div key={index} className={styles.dealCard}>
+                            <Skeleton height="120px" width="120px" borderRadius="8px" />
+                            <Skeleton height="1rem" width="80%" />
+                            <Skeleton height="0.85rem" width="50%" />
+                        </div>
+                    ))}
+                </div>
+                <LoadingCard
+                    message="Loading deals..."
+                    subMessage={loadingElapsed ? 'Scanning weekly ad — this may take 15-30 seconds' : undefined}
+                />
+            </div>
+        );
     }
 
     const { deals, week_id: weekId } = dealsData;
@@ -142,6 +175,9 @@ const DealsPage: React.FC = () => {
                         {deals.length} deals · {formatWeekId(weekId)}
                     </span>
                 </div>
+                {isRefreshing && (
+                    <span className={styles.meta}>Refreshing deals...</span>
+                )}
                 <div className={styles.headerActions}>
                     <button onClick={handleRefresh} disabled={isRefreshing}>
                         {isRefreshing ? 'Refreshing...' : 'Refresh'}

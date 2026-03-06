@@ -7,7 +7,7 @@ import {
     getFavoriteLocationIds,
     removeFavoriteLocation,
 } from '../../storage/preferences.ts';
-import { LoadingSpinner } from '../common/loading-spinner.tsx';
+import { Skeleton } from '../common/skeleton.tsx';
 import { ErrorCard } from '../common/error-card.tsx';
 import styles from './home-page.module.scss';
 
@@ -151,7 +151,16 @@ const HomePage: React.FC = () => {
                 <ErrorCard message="Unable to search locations." onRetry={searchResponse.run} />
             )}
 
-            {searchResponse.stage === PromiseStage.running && <LoadingSpinner />}
+            {searchResponse.stage === PromiseStage.running && (
+                <div className={styles.section}>
+                    <span className={styles.searchingMessage}>Searching for stores...</span>
+                    <div className={styles.grid}>
+                        {Array.from({ length: 3 }).map((_, index) => (
+                            <Skeleton key={index} height="3.5rem" borderRadius="12px" />
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {searchResponse.value != null && searchResponse.value.length > 0 && (
                 <div className={styles.section}>

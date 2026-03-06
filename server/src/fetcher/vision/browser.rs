@@ -6,9 +6,7 @@ use futures::StreamExt;
 
 use crate::error::AppError;
 
-/// Take full-page screenshots of a URL using headless Chrome.
-/// Returns one or more PNG screenshots (scrolls through the page).
-pub async fn screenshot_page(url: &str) -> Result<Vec<Vec<u8>>, AppError> {
+async fn launch_browser() -> Result<(Browser, tokio::task::JoinHandle<()>), AppError> {
     let config = BrowserConfig::builder()
         .chrome_executable("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe")
         .no_sandbox()
@@ -18,16 +16,49 @@ pub async fn screenshot_page(url: &str) -> Result<Vec<Vec<u8>>, AppError> {
         .build()
         .map_err(|err| AppError::Internal(format!("Failed to configure browser: {err}")))?;
 
-    let (mut browser, mut handler) = Browser::launch(config)
+    let (browser, mut handler) = Browser::launch(config)
         .await
         .map_err(|err| AppError::Internal(format!("Failed to launch browser: {err}")))?;
 
-    // Spawn handler task
     let handler_task = tokio::spawn(async move {
         while let Some(event) = handler.next().await {
             let _ = event;
         }
     });
+
+    Ok((browser, handler_task))
+}
+
+/// Get the rendered DOM HTML of a URL using headless Chrome.
+pub async fn dump_dom(url: &str) -> Result<String, AppError> {
+    let (mut browser, handler_task) = launch_browser().await?;
+
+    let page = browser
+        .new_page(url)
+        .await
+        .map_err(|err| AppError::Internal(format!("Failed to open page: {err}")))?;
+
+    // Wait for page to load and JS to execute
+    tokio::time::sleep(Duration::from_secs(8)).await;
+
+    let html: String = page
+        .evaluate("document.documentElement.outerHTML")
+        .await
+        .map_err(|err| AppError::Internal(format!("Failed to get DOM: {err}")))?
+        .into_value()
+        .unwrap_or_default();
+
+    let _ = browser.close().await;
+    handler_task.abort();
+
+    tracing::info!("dump_dom got {} chars from {url}", html.len());
+    Ok(html)
+}
+
+/// Take full-page screenshots of a URL using headless Chrome.
+/// Returns one or more PNG screenshots (scrolls through the page).
+pub async fn screenshot_page(url: &str) -> Result<Vec<Vec<u8>>, AppError> {
+    let (mut browser, handler_task) = launch_browser().await?;
 
     let result = screenshot_with_browser(&browser, url).await;
 

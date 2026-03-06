@@ -179,18 +179,101 @@ async fn fetch_and_cache_vision_deals(
     location: &crate::models::location::StoreLocation,
     week_id: &str,
 ) -> Result<Vec<crate::models::deal::Deal>, AppError> {
-    // Determine the weekly ad URL based on chain
+    let deal_tuples = match location.chain_id.as_str() {
+        "whole-foods" => fetch_whole_foods_deals(state, location).await?,
+        _ => fetch_generic_vision_deals(state, location).await?,
+    };
+
+    if deal_tuples.is_empty() {
+        return Ok(vec![]);
+    }
+
+    queries::save_deals(&state.pool, location.id, week_id, &deal_tuples).await?;
+
+    let deals = queries::get_cached_deals(&state.pool, location.id, week_id)
+        .await?
+        .unwrap_or_default();
+
+    Ok(deals)
+}
+
+/// Try structured __NEXT_DATA__ scrape first, fall back to Vision screenshots.
+async fn fetch_whole_foods_deals(
+    state: &AppState,
+    location: &crate::models::location::StoreLocation,
+) -> Result<Vec<(String, Option<String>, String, String, Option<String>)>, AppError> {
+    // Extract WFM store ID from weekly_ad_url or use a default
+    let wfm_store_id = location
+        .weekly_ad_url
+        .as_deref()
+        .and_then(|url| {
+            url.split("store-id=").nth(1).map(|s| {
+                s.split('&').next().unwrap_or(s).to_string()
+            })
+        })
+        .unwrap_or_else(|| "10260".to_string()); // Default to Redmond
+
+    tracing::info!(
+        "Trying structured scrape for Whole Foods store {}",
+        wfm_store_id
+    );
+
+    match crate::fetcher::vision::stores::whole_foods::fetch_deals(&wfm_store_id).await {
+        Ok(deals) if !deals.is_empty() => {
+            tracing::info!(
+                "Structured scrape got {} deals from Whole Foods",
+                deals.len()
+            );
+
+            // Still need AI categorization
+            let mut deal_tuples = deals;
+            let items_for_categorization: Vec<(String, Option<String>)> = deal_tuples
+                .iter()
+                .map(|(name, brand, _, _, _)| (name.clone(), brand.clone()))
+                .collect();
+
+            match crate::ai::categorize::categorize_items(
+                &state.ai,
+                &items_for_categorization,
+            )
+            .await
+            {
+                Ok(categories) => {
+                    for deal in &mut deal_tuples {
+                        if let Some(category) = categories.get(&deal.0) {
+                            deal.3 = category.clone();
+                        }
+                    }
+                    deal_tuples.retain(|deal| deal.3 != "not_food");
+                }
+                Err(err) => {
+                    tracing::warn!("Categorization failed for WF deals: {err}");
+                }
+            }
+
+            Ok(deal_tuples)
+        }
+        Ok(_) => {
+            tracing::warn!("Structured scrape returned empty, falling back to Vision");
+            fetch_generic_vision_deals(state, location).await
+        }
+        Err(err) => {
+            tracing::warn!("Structured scrape failed: {err}, falling back to Vision");
+            fetch_generic_vision_deals(state, location).await
+        }
+    }
+}
+
+async fn fetch_generic_vision_deals(
+    state: &AppState,
+    location: &crate::models::location::StoreLocation,
+) -> Result<Vec<(String, Option<String>, String, String, Option<String>)>, AppError> {
     let url = match location.weekly_ad_url.as_deref() {
         Some(url) => url.to_string(),
-        None => match location.chain_id.as_str() {
-            "whole-foods" => {
-                crate::fetcher::vision::stores::whole_foods::weekly_ad_url().to_string()
-            }
-            other => {
-                tracing::warn!("No weekly ad URL for chain: {other}");
-                return Ok(vec![]);
-            }
-        },
+        None => {
+            tracing::warn!("No weekly ad URL for chain: {}", location.chain_id);
+            return Ok(vec![]);
+        }
     };
 
     tracing::info!(
@@ -213,11 +296,5 @@ async fn fetch_and_cache_vision_deals(
         location.id
     );
 
-    queries::save_deals(&state.pool, location.id, week_id, &deal_tuples).await?;
-
-    let deals = queries::get_cached_deals(&state.pool, location.id, week_id)
-        .await?
-        .unwrap_or_default();
-
-    Ok(deals)
+    Ok(deal_tuples)
 }
