@@ -1,3 +1,4 @@
+mod ai;
 mod config;
 mod db;
 mod error;
@@ -8,6 +9,14 @@ mod routes;
 use axum::routing::{delete, get, post};
 use axum::Router;
 use tower_http::cors::CorsLayer;
+
+use crate::ai::client::AnthropicClient;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub pool: sqlx::SqlitePool,
+    pub ai: std::sync::Arc<AnthropicClient>,
+}
 
 #[tokio::main]
 async fn main() {
@@ -24,6 +33,10 @@ async fn main() {
     let pool = db::create_pool(&config.database_url)
         .await
         .expect("Failed to create database pool");
+
+    let ai = std::sync::Arc::new(AnthropicClient::new(config.anthropic_api_key));
+
+    let state = AppState { pool, ai };
 
     let app = Router::new()
         .route("/api/health", get(health))
@@ -45,7 +58,7 @@ async fn main() {
         )
         .route("/api/meals/:location_id", get(routes::meals::get_meals))
         .layer(CorsLayer::permissive())
-        .with_state(pool);
+        .with_state(state);
 
     let addr = format!("0.0.0.0:{}", config.port);
     tracing::info!("Server listening on {addr}");

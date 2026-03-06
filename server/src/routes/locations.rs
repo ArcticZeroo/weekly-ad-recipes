@@ -1,33 +1,33 @@
 use axum::extract::{Path, Query, State};
 use axum::Json;
 use serde::Deserialize;
-use sqlx::SqlitePool;
 
 use crate::db::queries;
 use crate::error::AppError;
 use crate::fetcher::flipp;
 use crate::models::location::{CreateLocationRequest, StoreLocation};
+use crate::AppState;
 
 pub async fn list_locations(
-    State(pool): State<SqlitePool>,
+    State(state): State<AppState>,
 ) -> Result<Json<Vec<StoreLocation>>, AppError> {
-    let locations = queries::list_locations(&pool).await?;
+    let locations = queries::list_locations(&state.pool).await?;
     Ok(Json(locations))
 }
 
 pub async fn create_location(
-    State(pool): State<SqlitePool>,
+    State(state): State<AppState>,
     Json(req): Json<CreateLocationRequest>,
 ) -> Result<Json<StoreLocation>, AppError> {
-    let location = queries::create_location(&pool, &req).await?;
+    let location = queries::create_location(&state.pool, &req).await?;
     Ok(Json(location))
 }
 
 pub async fn delete_location(
-    State(pool): State<SqlitePool>,
+    State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    queries::delete_location(&pool, id).await?;
+    queries::delete_location(&state.pool, id).await?;
     Ok(Json(serde_json::json!({ "deleted": true })))
 }
 
