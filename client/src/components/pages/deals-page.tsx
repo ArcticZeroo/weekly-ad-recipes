@@ -4,7 +4,7 @@ import { PromiseStage, useImmediatePromiseState } from '@arcticzeroo/react-promi
 import { fetchDeals, refreshDeals } from '../../api/client.ts';
 import type { Deal } from '../../models/generated/Deal.ts';
 import type { DealsResponse } from '../../models/generated/DealsResponse.ts';
-import { formatWeekId } from '../../util/week.ts';
+import { currentWeekRange, formatWeekId } from '../../util/week.ts';
 import { LoadingCard } from '../common/loading-card.tsx';
 import { Skeleton } from '../common/skeleton.tsx';
 import { ErrorCard } from '../common/error-card.tsx';
@@ -143,17 +143,23 @@ const DealsPage: React.FC = () => {
             <div className={`${styles.page} flex-col`}>
                 <div className={styles.header}>
                     <div className="flex-col">
-                        <Skeleton height="2rem" width="6rem" />
-                        <Skeleton height="0.9rem" width="12rem" />
+                        <h1>Deals</h1>
+                        <span className={styles.meta}>
+                            {currentWeekRange()}
+                        </span>
+                    </div>
+                    <div className={styles.headerActions}>
+                        <button disabled>Refresh</button>
+                        <button disabled className={styles.viewMealsButton}>View Meals</button>
                     </div>
                 </div>
                 <div className={styles.tabBar}>
-                    {Array.from({ length: 5 }).map((_, index) => (
-                        <Skeleton key={index} height="2rem" width="5rem" borderRadius="0" />
+                    {Array.from({ length: 6 }).map((_, index) => (
+                        <Skeleton key={index} height="2rem" width={`${4 + Math.random() * 3}rem`} borderRadius="0" />
                     ))}
                 </div>
                 <div className={styles.categorySection}>
-                    <Skeleton height="1.1rem" width="10rem" />
+                    <Skeleton height="1.1rem" width="8rem" />
                     <div className={styles.dealsGrid}>
                         {Array.from({ length: 8 }).map((_, index) => (
                             <div key={index} className={styles.dealCard}>

@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { PromiseStage, useImmediatePromiseState } from '@arcticzeroo/react-promise-hook';
 import { fetchMeals } from '../../api/client.ts';
-import { formatWeekId } from '../../util/week.ts';
+import { currentWeekRange, formatWeekId } from '../../util/week.ts';
 import { LoadingCard } from '../common/loading-card.tsx';
 import { Skeleton } from '../common/skeleton.tsx';
 import { ErrorCard } from '../common/error-card.tsx';
@@ -28,8 +28,13 @@ const MealsPage: React.FC = () => {
                 <div className={styles.header}>
                     <div className="flex-col">
                         <h1>Meal Ideas</h1>
-                        <Skeleton height="0.9rem" width="14rem" />
+                        <span className={styles.meta}>
+                            {currentWeekRange()}
+                        </span>
                     </div>
+                    <Link to={`/${chain}/${zip}/deals`}>
+                        <button>Back to Deals</button>
+                    </Link>
                 </div>
                 <div className={styles.mealsGrid}>
                     {Array.from({ length: 4 }).map((_, index) => (

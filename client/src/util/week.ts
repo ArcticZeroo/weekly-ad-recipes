@@ -37,3 +37,26 @@ const weekIdToDateRange = (weekId: string): [Date, Date] | null => {
 
     return [monday, sunday];
 };
+
+/**
+ * Get the current ISO week ID (e.g., "2026-W10").
+ */
+export const currentWeekId = (): string => {
+    const now = new Date();
+    const jan4 = new Date(now.getFullYear(), 0, 4);
+    const dayOfWeek = jan4.getDay() || 7;
+    const monday = new Date(jan4);
+    monday.setDate(jan4.getDate() - (dayOfWeek - 1));
+
+    const diff = now.getTime() - monday.getTime();
+    const week = Math.floor(diff / (7 * 24 * 60 * 60 * 1000)) + 1;
+
+    return `${now.getFullYear()}-W${String(week).padStart(2, '0')}`;
+};
+
+/**
+ * Get the current week formatted as a date range (e.g., "Mar 2 – Mar 8").
+ */
+export const currentWeekRange = (): string => {
+    return formatWeekId(currentWeekId());
+};
