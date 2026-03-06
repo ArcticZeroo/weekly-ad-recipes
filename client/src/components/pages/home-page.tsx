@@ -45,9 +45,6 @@ const HomePage: React.FC = () => {
                         className={styles.locationCard}
                     >
                         <span className={styles.locationName}>{location.name}</span>
-                        <span className={styles.locationMeta}>
-                            {location.chain_id} · {location.zip_code}
-                        </span>
                         {location.address && (
                             <span className={styles.locationMeta}>{location.address}</span>
                         )}

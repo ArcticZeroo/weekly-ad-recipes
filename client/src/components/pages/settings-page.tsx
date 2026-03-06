@@ -161,10 +161,6 @@ const SettingsPage: React.FC = () => {
                                 <div key={location.id} className={styles.locationCard}>
                                     <div className={styles.locationInfo}>
                                         <span className={styles.locationName}>{location.name}</span>
-                                        <span className={styles.locationMeta}>
-                                            {location.chain_id} · {location.zip_code}
-                                            {location.address && ` · ${location.address}`}
-                                        </span>
                                     </div>
                                     <button
                                         className={styles.removeButton}
