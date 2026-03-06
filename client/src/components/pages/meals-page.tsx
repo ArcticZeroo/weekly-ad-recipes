@@ -26,18 +26,33 @@ const MealsPage: React.FC = () => {
     if (response.value == null) {
         return (
             <div className={`${styles.page} flex-col`}>
-                <h1>Meal Ideas</h1>
+                <div className={styles.header}>
+                    <div className="flex-col">
+                        <h1>Meal Ideas</h1>
+                        <Skeleton height="0.9rem" width="14rem" />
+                    </div>
+                </div>
                 <div className={styles.mealsGrid}>
-                    {Array.from({ length: 3 }).map((_, index) => (
+                    {Array.from({ length: 4 }).map((_, index) => (
                         <div key={index} className={styles.mealCard}>
-                            <Skeleton height="1.2rem" width="70%" />
-                            <Skeleton height="3rem" />
-                            <Skeleton height="0.8rem" width="40%" />
-                            <div className="flex flex-wrap">
-                                <Skeleton height="1.5rem" width="4rem" borderRadius="6px" />
-                                <Skeleton height="1.5rem" width="5rem" borderRadius="6px" />
-                                <Skeleton height="1.5rem" width="3.5rem" borderRadius="6px" />
+                            <Skeleton height="1.2rem" width="65%" />
+                            <Skeleton height="2.5rem" />
+                            <div className={styles.ingredientsSection}>
+                                <Skeleton height="0.75rem" width="3rem" />
+                                <div className={styles.ingredientsList}>
+                                    <Skeleton height="1.5rem" width="5rem" borderRadius="6px" />
+                                    <Skeleton height="1.5rem" width="4rem" borderRadius="6px" />
+                                    <Skeleton height="1.5rem" width="6rem" borderRadius="6px" />
+                                </div>
                             </div>
+                            <div className={styles.ingredientsSection}>
+                                <Skeleton height="0.75rem" width="4.5rem" />
+                                <div className={styles.ingredientsList}>
+                                    <Skeleton height="1.5rem" width="3.5rem" borderRadius="6px" />
+                                    <Skeleton height="1.5rem" width="4.5rem" borderRadius="6px" />
+                                </div>
+                            </div>
+                            <Skeleton height="0.85rem" width="7rem" />
                         </div>
                     ))}
                 </div>

@@ -142,19 +142,29 @@ const DealsPage: React.FC = () => {
     if (dealsData == null) {
         return (
             <div className={`${styles.page} flex-col`}>
+                <div className={styles.header}>
+                    <div className="flex-col">
+                        <Skeleton height="2rem" width="6rem" />
+                        <Skeleton height="0.9rem" width="12rem" />
+                    </div>
+                </div>
                 <div className={styles.tabBar}>
-                    {Array.from({ length: 4 }).map((_, index) => (
-                        <Skeleton key={index} height="2rem" width="5rem" borderRadius="8px" />
+                    {Array.from({ length: 5 }).map((_, index) => (
+                        <Skeleton key={index} height="2rem" width="5rem" borderRadius="0" />
                     ))}
                 </div>
-                <div className={styles.dealsGrid}>
-                    {Array.from({ length: 6 }).map((_, index) => (
-                        <div key={index} className={styles.dealCard}>
-                            <Skeleton height="120px" width="120px" borderRadius="8px" />
-                            <Skeleton height="1rem" width="80%" />
-                            <Skeleton height="0.85rem" width="50%" />
-                        </div>
-                    ))}
+                <div className={styles.categorySection}>
+                    <Skeleton height="1.1rem" width="10rem" />
+                    <div className={styles.dealsGrid}>
+                        {Array.from({ length: 8 }).map((_, index) => (
+                            <div key={index} className={styles.dealCard}>
+                                <Skeleton height="120px" width="120px" borderRadius="8px" />
+                                <Skeleton height="1rem" width="85%" />
+                                <Skeleton height="0.8rem" width="50%" />
+                                <Skeleton height="0.9rem" width="40%" />
+                            </div>
+                        ))}
+                    </div>
                 </div>
                 <LoadingCard
                     message="Loading deals..."
