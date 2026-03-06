@@ -37,6 +37,7 @@ pub struct FlippFlyer {
 pub struct FlippItem {
     pub id: Option<i64>,
     pub name: Option<String>,
+    pub display_type: Option<i32>,
     pub brand: Option<String>,
     pub description: Option<String>,
     pub price: Option<String>,
@@ -159,13 +160,19 @@ pub async fn fetch_flyer_items(
     Ok(items)
 }
 
-/// Convert Flipp items into the tuple format expected by save_deals
+/// Convert Flipp items into the tuple format expected by save_deals.
+/// Filters out non-deal items (display_type 5 = logos/promos).
 pub fn items_to_deal_tuples(
     items: &[FlippItem],
 ) -> Vec<(String, Option<String>, String, String, Option<String>)> {
     items
         .iter()
         .filter_map(|item| {
+            // display_type 5 = non-deal items (store logos, promo banners)
+            if item.display_type == Some(5) {
+                return None;
+            }
+
             let name = item.name.as_ref()?.trim().to_string();
             if name.is_empty() {
                 return None;
@@ -215,4 +222,35 @@ fn build_deal_description(item: &FlippItem) -> String {
     } else {
         parts.join(" - ")
     }
+}
+
+/// Returns items that have "On Sale" as their description but have a cutout image
+/// that likely contains the actual deal text (e.g., "Buy 1 Get 1 Free").
+pub fn items_needing_vision(
+    items: &[FlippItem],
+) -> Vec<(String, String)> {
+    items
+        .iter()
+        .filter_map(|item| {
+            if item.display_type == Some(5) {
+                return None;
+            }
+            let name = item.name.as_ref()?.trim().to_string();
+            if name.is_empty() {
+                return None;
+            }
+            let price = item.price.as_deref().unwrap_or("").trim();
+            let has_price_info = !price.is_empty()
+                || item.pre_price_text.as_deref().unwrap_or("").trim().len() > 0
+                || item.description.as_deref().unwrap_or("").trim().len() > 0;
+            if has_price_info {
+                return None;
+            }
+            let image_url = item.cutout_image_url.as_ref()?.trim().to_string();
+            if image_url.is_empty() {
+                return None;
+            }
+            Some((name, image_url))
+        })
+        .collect()
 }

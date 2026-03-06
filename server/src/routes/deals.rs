@@ -106,6 +106,33 @@ async fn fetch_and_cache_flipp_deals(
         location.id
     );
 
+    // Extract deal descriptions from images for items with no price info
+    let vision_items = flipp::items_needing_vision(&items);
+    if !vision_items.is_empty() {
+        tracing::info!("{} items need vision extraction", vision_items.len());
+        match crate::ai::extract_deals::extract_deals_from_images(
+            &state.ai,
+            &client,
+            &vision_items,
+        )
+        .await
+        {
+            Ok(extracted) => {
+                for deal in &mut deal_tuples {
+                    if deal.2 == "On Sale" {
+                        if let Some(description) = extracted.get(&deal.0) {
+                            deal.2 = description.clone();
+                        }
+                    }
+                }
+                tracing::info!("Vision extracted deals for {} items", extracted.len());
+            }
+            Err(err) => {
+                tracing::warn!("Vision deal extraction failed: {err}");
+            }
+        }
+    }
+
     // AI categorization
     let items_for_categorization: Vec<(String, Option<String>)> = deal_tuples
         .iter()

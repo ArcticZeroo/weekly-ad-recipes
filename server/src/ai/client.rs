@@ -15,7 +15,7 @@ struct MessageRequest {
 #[derive(Debug, Serialize)]
 struct Message {
     role: String,
-    content: String,
+    content: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,6 +47,27 @@ impl AnthropicClient {
         max_tokens: u32,
         prompt: &str,
     ) -> Result<String, AppError> {
+        let content = serde_json::Value::String(prompt.to_string());
+        self.send_raw(model, max_tokens, content).await
+    }
+
+    /// Send a message with mixed text and image content blocks.
+    pub async fn send_with_images(
+        &self,
+        model: &str,
+        max_tokens: u32,
+        content_blocks: Vec<serde_json::Value>,
+    ) -> Result<String, AppError> {
+        let content = serde_json::Value::Array(content_blocks);
+        self.send_raw(model, max_tokens, content).await
+    }
+
+    async fn send_raw(
+        &self,
+        model: &str,
+        max_tokens: u32,
+        content: serde_json::Value,
+    ) -> Result<String, AppError> {
         if self.api_key.is_empty() {
             return Err(AppError::Ai(
                 "ANTHROPIC_API_KEY not configured".to_string(),
@@ -58,7 +79,7 @@ impl AnthropicClient {
             max_tokens,
             messages: vec![Message {
                 role: "user".to_string(),
-                content: prompt.to_string(),
+                content,
             }],
         };
 
