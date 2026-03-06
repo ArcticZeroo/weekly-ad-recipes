@@ -43,6 +43,7 @@ const HomePage: React.FC = () => {
     const [zipCode, setZipCode] = useState('');
     const [favoriteIds, setFavoriteIds] = useState<Set<number>>(getFavoriteLocationIds);
     const [favoriteEntries, setFavoriteEntries] = useState<IFavoriteEntry[]>(loadFavoriteEntries);
+    const [searchedZip, setSearchedZip] = useState('');
     const [resolvingChain, setResolvingChain] = useState<string | null>(null);
     const navigate = useNavigate();
 
@@ -58,12 +59,13 @@ const HomePage: React.FC = () => {
             return;
         }
         searchResponse.run();
+        setSearchedZip(zipCode.trim());
     };
 
     const handleResolveAndNavigate = async (match: IFlippStoreMatch) => {
         setResolvingChain(match.chain_id);
         try {
-            const location = await resolveLocation(match, zipCode.trim());
+            const location = await resolveLocation(match, searchedZip);
             navigate(`/${location.id}/deals`);
         } catch {
             // fall through, user can retry
@@ -74,7 +76,7 @@ const HomePage: React.FC = () => {
 
     const handleToggleFavorite = async (match: IFlippStoreMatch) => {
         const existing = favoriteEntries.find(
-            (entry) => entry.chainName === match.chain_name && entry.zipCode === zipCode.trim(),
+            (entry) => entry.chainName === match.chain_name && entry.zipCode === searchedZip,
         );
 
         if (existing) {
@@ -88,13 +90,13 @@ const HomePage: React.FC = () => {
         } else {
             setResolvingChain(match.chain_id);
             try {
-                const location = await resolveLocation(match, zipCode.trim());
+                const location = await resolveLocation(match, searchedZip);
                 const updatedIds = addFavoriteLocation(location.id);
                 setFavoriteIds(new Set(updatedIds));
                 const entry: IFavoriteEntry = {
                     locationId: location.id,
                     chainName: match.chain_name,
-                    zipCode: zipCode.trim(),
+                    zipCode: searchedZip,
                 };
                 const updatedEntries = [...favoriteEntries, entry];
                 setFavoriteEntries(updatedEntries);
@@ -119,7 +121,7 @@ const HomePage: React.FC = () => {
 
     const isMatchFavorited = (match: IFlippStoreMatch): boolean => {
         return favoriteEntries.some(
-            (entry) => entry.chainName === match.chain_name && entry.zipCode === zipCode.trim(),
+            (entry) => entry.chainName === match.chain_name && entry.zipCode === searchedZip,
         );
     };
 
@@ -153,7 +155,7 @@ const HomePage: React.FC = () => {
 
             {searchResponse.value != null && searchResponse.value.length > 0 && (
                 <div className={styles.section}>
-                    <h2 className={styles.sectionTitle}>Stores near {zipCode}</h2>
+                    <h2 className={styles.sectionTitle}>Stores near {searchedZip}</h2>
                     <div className={styles.grid}>
                         {searchResponse.value.map((match) => (
                             <div key={match.chain_id} className={styles.resultCard}>
