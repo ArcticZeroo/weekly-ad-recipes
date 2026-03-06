@@ -40,21 +40,25 @@ pub struct ResolveRequest {
 
 /// Find-or-create a location record, returning the stable ID.
 /// Called when a user favorites or clicks into a store.
+/// Deduplicates by flipp_merchant_id so the same chain across
+/// nearby zip codes resolves to a single location.
 pub async fn resolve_location(
     State(state): State<AppState>,
     Json(req): Json<ResolveRequest>,
 ) -> Result<Json<StoreLocation>, AppError> {
-    // Check if already exists
-    if let Some(existing) =
-        queries::find_location_by_chain_zip(&state.pool, &req.chain_id, &req.zip_code).await?
-    {
-        return Ok(Json(existing));
+    // Check if this merchant already has a location record
+    if let Some(merchant_id) = req.flipp_merchant_id {
+        if let Some(existing) =
+            queries::find_location_by_merchant(&state.pool, merchant_id).await?
+        {
+            return Ok(Json(existing));
+        }
     }
 
     // Create it
     let create_req = CreateLocationRequest {
         chain_id: req.chain_id.clone(),
-        name: format!("{} - {}", req.chain_name, req.zip_code),
+        name: req.chain_name.clone(),
         address: None,
         zip_code: req.zip_code,
         flipp_merchant_id: req.flipp_merchant_id,

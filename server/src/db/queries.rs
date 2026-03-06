@@ -33,18 +33,16 @@ pub async fn get_location(pool: &SqlitePool, id: i64) -> Result<StoreLocation, A
     .ok_or_else(|| AppError::NotFound(format!("Location {id} not found")))
 }
 
-pub async fn find_location_by_chain_zip(
+pub async fn find_location_by_merchant(
     pool: &SqlitePool,
-    chain_id: &str,
-    zip_code: &str,
+    flipp_merchant_id: i64,
 ) -> Result<Option<StoreLocation>, AppError> {
     let location = sqlx::query_as!(
         StoreLocation,
         r#"SELECT id as "id!", chain_id, name, address, zip_code,
            flipp_merchant_id, flipp_merchant_name, weekly_ad_url, created_at
-           FROM store_locations WHERE chain_id = ? AND zip_code = ?"#,
-        chain_id,
-        zip_code
+           FROM store_locations WHERE flipp_merchant_id = ?"#,
+        flipp_merchant_id
     )
     .fetch_optional(pool)
     .await?;
