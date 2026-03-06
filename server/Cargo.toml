@@ -38,6 +38,7 @@ thiserror = "1"
 # Utilities
 base64 = "0.21"
 rand = "0.8"
+futures = "0.3"
 
 # Headless browser (Vision fallback)
 chromiumoxide = { version = "0.5", features = ["tokio-runtime"], default-features = false }

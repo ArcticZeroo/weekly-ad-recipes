@@ -36,10 +36,12 @@ pub async fn get_deals(
         }));
     }
 
+    // Vision fallback for non-Flipp stores (e.g. Whole Foods)
+    let deals = fetch_and_cache_vision_deals(&state, &location, &week_id).await?;
     Ok(Json(DealsResponse {
         location_id,
         week_id,
-        deals: vec![],
+        deals,
         cached: false,
     }))
 }
@@ -62,10 +64,12 @@ pub async fn refresh_deals(
         }));
     }
 
+    // Vision fallback for non-Flipp stores
+    let deals = fetch_and_cache_vision_deals(&state, &location, &week_id).await?;
     Ok(Json(DealsResponse {
         location_id,
         week_id,
-        deals: vec![],
+        deals,
         cached: false,
     }))
 }
@@ -160,6 +164,54 @@ async fn fetch_and_cache_flipp_deals(
             tracing::warn!("AI categorization failed, using 'uncategorized': {err}");
         }
     }
+
+    queries::save_deals(&state.pool, location.id, week_id, &deal_tuples).await?;
+
+    let deals = queries::get_cached_deals(&state.pool, location.id, week_id)
+        .await?
+        .unwrap_or_default();
+
+    Ok(deals)
+}
+
+async fn fetch_and_cache_vision_deals(
+    state: &AppState,
+    location: &crate::models::location::StoreLocation,
+    week_id: &str,
+) -> Result<Vec<crate::models::deal::Deal>, AppError> {
+    // Determine the weekly ad URL based on chain
+    let url = match location.weekly_ad_url.as_deref() {
+        Some(url) => url.to_string(),
+        None => match location.chain_id.as_str() {
+            "whole-foods" => {
+                crate::fetcher::vision::stores::whole_foods::weekly_ad_url().to_string()
+            }
+            other => {
+                tracing::warn!("No weekly ad URL for chain: {other}");
+                return Ok(vec![]);
+            }
+        },
+    };
+
+    tracing::info!(
+        "Taking screenshots of {} for location {}",
+        url,
+        location.id
+    );
+
+    let screenshots =
+        crate::fetcher::vision::browser::screenshot_page(&url).await?;
+
+    tracing::info!("Captured {} screenshots, sending to Vision AI", screenshots.len());
+
+    let deal_tuples =
+        crate::fetcher::vision::extract_deals_from_screenshots(&state.ai, &screenshots).await?;
+
+    tracing::info!(
+        "Vision extracted {} deals for location {}",
+        deal_tuples.len(),
+        location.id
+    );
 
     queries::save_deals(&state.pool, location.id, week_id, &deal_tuples).await?;
 

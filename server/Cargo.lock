@@ -2739,6 +2739,7 @@ dependencies = [
  "chromiumoxide",
  "chrono",
  "dotenvy",
+ "futures",
  "rand",
  "reqwest",
  "serde",
