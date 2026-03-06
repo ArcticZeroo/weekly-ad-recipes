@@ -125,6 +125,8 @@ async fn fetch_and_cache_flipp_deals(
                         }
                     }
                 }
+                // Remove items the AI identified as not actual deals
+                deal_tuples.retain(|deal| deal.2 != "NOT_A_DEAL");
                 tracing::info!("Vision extracted deals for {} items", extracted.len());
             }
             Err(err) => {
@@ -133,7 +135,7 @@ async fn fetch_and_cache_flipp_deals(
         }
     }
 
-    // AI categorization
+    // AI categorization — also filters out non-food items
     let items_for_categorization: Vec<(String, Option<String>)> = deal_tuples
         .iter()
         .map(|(name, brand, _, _, _)| (name.clone(), brand.clone()))
@@ -146,7 +148,13 @@ async fn fetch_and_cache_flipp_deals(
                     deal.3 = category.clone();
                 }
             }
-            tracing::info!("AI categorized {} items", categories.len());
+            let before = deal_tuples.len();
+            deal_tuples.retain(|deal| deal.3 != "not_food");
+            tracing::info!(
+                "AI categorized {} items, filtered {} non-food",
+                categories.len(),
+                before - deal_tuples.len()
+            );
         }
         Err(err) => {
             tracing::warn!("AI categorization failed, using 'uncategorized': {err}");

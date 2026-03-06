@@ -17,8 +17,7 @@ const CATEGORIES: &[&str] = &[
     "snacks",
     "deli",
     "seafood",
-    "household",
-    "other",
+    "not_food",
 ];
 
 /// Batch-categorize a list of item names into grocery categories.
@@ -49,11 +48,15 @@ pub async fn categorize_items(
     let prompt = format!(
         r#"Categorize each grocery item into exactly one category. Categories: {categories}
 
+This is for a meal planning app, so focus on food and drink items.
+Use "not_food" for non-food items like baby supplies, cleaning products, toiletries, pet food, 
+Easter decorations, flowers, household items, etc. Alcohol and beverages should stay as "beverages".
+
 Items:
 {item_list}
 
 Respond with ONLY a JSON object mapping item names (exactly as given, without the number prefix) to their category. Example:
-{{"Bananas": "produce", "Chicken Breast": "meat"}}
+{{"Bananas": "produce", "Chicken Breast": "meat", "Dial Hand Soap": "not_food"}}
 
 Important: Use the exact item names from the list. Output only the JSON object, no other text."#
     );

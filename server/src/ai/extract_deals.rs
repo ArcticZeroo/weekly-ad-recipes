@@ -74,13 +74,13 @@ pub async fn extract_deals_from_images(
 
     content_blocks.push(json!({
         "type": "text",
-        "text": format!(
-            "For each item image above, read the deal/sale text visible in the image \
+        "text": "For each item image above, read the deal/sale text visible in the image \
              (e.g. \"Buy 1 Get 1 Free\", \"2 for $5\", \"$3.99/lb\", \"Save $2\", etc). \
              Respond with ONLY a JSON object mapping item names (exactly as given) to the deal text. \
-             If you can't determine the deal, use \"On Sale\". Example:\n\
-             {{\"Coca-Cola\": \"Buy 2 Get 1 Free\", \"Doritos\": \"2 for $7\"}}"
-        )
+             If the image is NOT an actual deal (e.g. it's an ad for a service, party platter ordering, \
+             a store section header, or a promotional banner), use \"NOT_A_DEAL\" as the value. \
+             If it IS a deal but you can't read the specific terms, use \"On Sale\". Example:\n\
+             {\"Coca-Cola\": \"Buy 2 Get 1 Free\", \"Doritos\": \"2 for $7\", \"Deli & Bakery\": \"NOT_A_DEAL\"}"
     }));
 
     tracing::info!(
