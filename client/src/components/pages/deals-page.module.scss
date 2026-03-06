@@ -1,0 +1,106 @@
+@use '../../variables' as *;
+
+.page {
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--default-padding);
+}
+
+.headerActions {
+    display: flex;
+    align-items: center;
+    gap: var(--constant-padding);
+}
+
+.meta {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+}
+
+.cachedBadge {
+    display: inline-block;
+    padding: 0.15em 0.5em;
+    font-size: 0.8rem;
+    border-radius: 6px;
+    background-color: var(--color-background-raised);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+}
+
+.categorySection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--default-padding);
+}
+
+.categoryTitle {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+    padding-bottom: var(--constant-padding);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.dealsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: var(--default-padding);
+}
+
+.dealCard {
+    background-color: var(--color-background-card);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: var(--default-padding);
+    display: flex;
+    flex-direction: column;
+    gap: var(--constant-padding);
+}
+
+.dealImage {
+    width: 120px;
+    height: 120px;
+    object-fit: contain;
+    border-radius: 8px;
+    align-self: center;
+    background-color: var(--color-background-input);
+}
+
+.dealName {
+    font-weight: 600;
+}
+
+.dealBrand {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.dealDescription {
+    font-size: 0.9rem;
+    color: var(--color-text);
+}
+
+.viewMealsButton {
+    background-color: var(--color-theme);
+    color: white;
+    border-color: var(--color-theme);
+
+    &:hover {
+        background-color: var(--color-theme-hover);
+        border-color: var(--color-theme-hover);
+    }
+}
+
+@media (max-width: $breakpoint-small) {
+    .dealsGrid {
+        grid-template-columns: 1fr;
+    }
+}

@@ -1,0 +1,120 @@
+@use '../../variables' as *;
+
+.page {
+    max-width: 900px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.searchForm {
+    display: flex;
+    align-items: center;
+    gap: var(--constant-padding);
+
+    input {
+        flex-grow: 1;
+        max-width: 240px;
+    }
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--default-padding);
+}
+
+.sectionTitle {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.resultCard {
+    background-color: var(--color-background-card);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: var(--default-padding);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--default-padding);
+}
+
+.resultInfo {
+    display: flex;
+    flex-direction: column;
+    gap: var(--constant-padding);
+}
+
+.resultName {
+    font-weight: 600;
+}
+
+.resultMeta {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.locationCard {
+    background-color: var(--color-background-card);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: var(--default-padding);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--default-padding);
+}
+
+.locationInfo {
+    display: flex;
+    flex-direction: column;
+    gap: var(--constant-padding);
+}
+
+.locationName {
+    font-weight: 600;
+}
+
+.locationMeta {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.addButton {
+    background-color: var(--color-theme);
+    color: white;
+    border-color: var(--color-theme);
+
+    &:hover {
+        background-color: var(--color-theme-hover);
+        border-color: var(--color-theme-hover);
+    }
+}
+
+.removeButton {
+    color: var(--color-error);
+    border-color: var(--color-error);
+
+    &:hover {
+        background-color: var(--color-error-background);
+    }
+}
+
+.successMessage {
+    color: var(--color-success);
+    font-size: 0.9rem;
+}
+
+.emptyMessage {
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+@media (max-width: $breakpoint-small) {
+    .resultCard,
+    .locationCard {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}

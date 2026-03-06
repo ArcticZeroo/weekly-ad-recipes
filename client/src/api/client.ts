@@ -3,6 +3,17 @@ import type { MealsResponse } from '../models/generated/MealsResponse.ts';
 import type { StoreChain } from '../models/generated/StoreChain.ts';
 import type { StoreLocation } from '../models/generated/StoreLocation.ts';
 
+export interface IFlippStoreMatch {
+    chain_id: string;
+    chain_name: string;
+    flyer_id: number;
+    merchant_id: number | null;
+    merchant_name: string;
+    store_name: string | null;
+    valid_from: string | null;
+    valid_to: string | null;
+}
+
 const fetchJson = async <T>(url: string, options?: RequestInit): Promise<T> => {
     const response = await fetch(url, options);
 
@@ -24,7 +35,7 @@ export const fetchLocations = async (): Promise<StoreLocation[]> => {
     return fetchJson<StoreLocation[]>('/api/locations');
 };
 
-interface IAddLocationRequest {
+export interface IAddLocationRequest {
     chain_id: string;
     name: string;
     address?: string;
@@ -53,8 +64,8 @@ export const deleteLocation = async (locationId: number): Promise<void> => {
     }
 };
 
-export const searchLocations = async (zipCode: string): Promise<StoreLocation[]> => {
-    return fetchJson<StoreLocation[]>(`/api/locations/search?zip=${encodeURIComponent(zipCode)}`);
+export const searchLocations = async (zipCode: string): Promise<IFlippStoreMatch[]> => {
+    return fetchJson<IFlippStoreMatch[]>(`/api/locations/search?zip=${encodeURIComponent(zipCode)}`);
 };
 
 // Deals
