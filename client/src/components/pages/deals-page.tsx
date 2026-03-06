@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { PromiseStage, useImmediatePromiseState } from '@arcticzeroo/react-promise-hook';
 import { fetchDeals, refreshDeals } from '../../api/client.ts';
@@ -35,6 +35,10 @@ const DealsPage: React.FC = () => {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [refreshedData, setRefreshedData] = useState<DealsResponse | null>(null);
     const [refreshError, setRefreshError] = useState<string | null>(null);
+    const [activeCategory, setActiveCategory] = useState<string | null>(null);
+    const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+    const tabBarRef = useRef<HTMLDivElement>(null);
+    const isScrollingFromClick = useRef(false);
 
     const retrieveDeals = useCallback(
         () => fetchDeals(parsedLocationId),
@@ -51,12 +55,66 @@ const DealsPage: React.FC = () => {
         return groupDealsByCategory(dealsData.deals);
     }, [dealsData]);
 
+    const categories = useMemo(() => Array.from(groupedDeals.keys()), [groupedDeals]);
+
+    // Set initial active category
+    useEffect(() => {
+        if (categories.length > 0 && activeCategory == null) {
+            setActiveCategory(categories[0] ?? null);
+        }
+    }, [categories, activeCategory]);
+
+    // Intersection observer to track which category is in view
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (isScrollingFromClick.current) {
+                    return;
+                }
+                for (const entry of entries) {
+                    if (entry.isIntersecting) {
+                        const category = entry.target.getAttribute('data-category');
+                        if (category) {
+                            setActiveCategory(category);
+                        }
+                    }
+                }
+            },
+            {
+                rootMargin: '-120px 0px -60% 0px',
+                threshold: 0,
+            },
+        );
+
+        for (const element of sectionRefs.current.values()) {
+            observer.observe(element);
+        }
+
+        return () => observer.disconnect();
+    }, [categories]);
+
+    const handleTabClick = (category: string) => {
+        setActiveCategory(category);
+        const element = sectionRefs.current.get(category);
+        if (element) {
+            isScrollingFromClick.current = true;
+            const tabBarHeight = tabBarRef.current?.offsetHeight ?? 0;
+            const elementTop = element.getBoundingClientRect().top + window.scrollY;
+            // Account for sticky nav + sticky tab bar
+            window.scrollTo({ top: elementTop - tabBarHeight - 80, behavior: 'smooth' });
+            setTimeout(() => {
+                isScrollingFromClick.current = false;
+            }, 800);
+        }
+    };
+
     const handleRefresh = async () => {
         setIsRefreshing(true);
         setRefreshError(null);
         try {
             const freshData = await refreshDeals(parsedLocationId);
             setRefreshedData(freshData);
+            setActiveCategory(null);
         } catch (error) {
             setRefreshError(error instanceof Error ? error.message : 'Failed to refresh deals.');
         } finally {
@@ -98,31 +156,56 @@ const DealsPage: React.FC = () => {
             {deals.length === 0 ? (
                 <p className={styles.meta}>No deals found for this location this week.</p>
             ) : (
-                Array.from(groupedDeals.entries()).map(([category, categoryDeals]) => (
-                    <div key={category} className={styles.categorySection}>
-                        <h2 className={styles.categoryTitle}>
-                            {capitalizeCategory(category)} ({categoryDeals.length})
-                        </h2>
-                        <div className={styles.dealsGrid}>
-                            {categoryDeals.map((deal) => (
-                                <div key={deal.id} className={styles.dealCard}>
-                                    {deal.image_url && (
-                                        <img
-                                            src={deal.image_url}
-                                            alt={deal.item_name}
-                                            className={styles.dealImage}
-                                        />
-                                    )}
-                                    <span className={styles.dealName}>{deal.item_name}</span>
-                                    {deal.brand && (
-                                        <span className={styles.dealBrand}>{deal.brand}</span>
-                                    )}
-                                    <span className={styles.dealDescription}>{deal.deal_description}</span>
-                                </div>
-                            ))}
-                        </div>
+                <>
+                    <div ref={tabBarRef} className={styles.tabBar}>
+                        {categories.map((category) => (
+                            <button
+                                key={category}
+                                className={`${styles.tab} ${activeCategory === category ? styles.tabActive : ''}`}
+                                onClick={() => handleTabClick(category)}
+                            >
+                                {capitalizeCategory(category)}
+                            </button>
+                        ))}
                     </div>
-                ))
+
+                    {Array.from(groupedDeals.entries()).map(([category, categoryDeals]) => (
+                        <div
+                            key={category}
+                            className={styles.categorySection}
+                            data-category={category}
+                            ref={(element) => {
+                                if (element) {
+                                    sectionRefs.current.set(category, element);
+                                } else {
+                                    sectionRefs.current.delete(category);
+                                }
+                            }}
+                        >
+                            <h2 className={styles.categoryTitle}>
+                                {capitalizeCategory(category)} ({categoryDeals.length})
+                            </h2>
+                            <div className={styles.dealsGrid}>
+                                {categoryDeals.map((deal) => (
+                                    <div key={deal.id} className={styles.dealCard}>
+                                        {deal.image_url && (
+                                            <img
+                                                src={deal.image_url}
+                                                alt={deal.item_name}
+                                                className={styles.dealImage}
+                                            />
+                                        )}
+                                        <span className={styles.dealName}>{deal.item_name}</span>
+                                        {deal.brand && (
+                                            <span className={styles.dealBrand}>{deal.brand}</span>
+                                        )}
+                                        <span className={styles.dealDescription}>{deal.deal_description}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </>
             )}
         </div>
     );
