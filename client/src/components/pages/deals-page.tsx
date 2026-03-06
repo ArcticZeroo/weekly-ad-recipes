@@ -4,6 +4,7 @@ import { PromiseStage, useImmediatePromiseState } from '@arcticzeroo/react-promi
 import { fetchDeals, refreshDeals } from '../../api/client.ts';
 import type { Deal } from '../../models/generated/Deal.ts';
 import type { DealsResponse } from '../../models/generated/DealsResponse.ts';
+import { formatWeekId } from '../../util/week.ts';
 import { LoadingSpinner } from '../common/loading-spinner.tsx';
 import { ErrorCard } from '../common/error-card.tsx';
 import styles from './deals-page.module.scss';
@@ -138,7 +139,7 @@ const DealsPage: React.FC = () => {
                 <div className="flex-col">
                     <h1>Deals</h1>
                     <span className={styles.meta}>
-                        {deals.length} deals for week {weekId}
+                        {deals.length} deals · {formatWeekId(weekId)}
                     </span>
                 </div>
                 <div className={styles.headerActions}>

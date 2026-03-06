@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { PromiseStage, useImmediatePromiseState } from '@arcticzeroo/react-promise-hook';
 import { fetchMeals } from '../../api/client.ts';
+import { formatWeekId } from '../../util/week.ts';
 import { LoadingSpinner } from '../common/loading-spinner.tsx';
 import { ErrorCard } from '../common/error-card.tsx';
 import styles from './meals-page.module.scss';
@@ -48,7 +49,7 @@ const MealsPage: React.FC = () => {
                 <div className="flex-col">
                     <h1>Meal Ideas</h1>
                     <span className={styles.meta}>
-                        {meals.length} meal ideas for week {weekId}
+                        {meals.length} meal ideas · {formatWeekId(weekId)}
                         {cached && ' · cached'}
                     </span>
                 </div>
