@@ -72,7 +72,7 @@ const DealsPage: React.FC = () => {
         return <LoadingSpinner />;
     }
 
-    const { deals, week_id: weekId, cached } = dealsData;
+    const { deals, week_id: weekId } = dealsData;
 
     return (
         <div className={`${styles.page} flex-col`}>
@@ -81,7 +81,6 @@ const DealsPage: React.FC = () => {
                     <h1>Deals</h1>
                     <span className={styles.meta}>
                         {deals.length} deals for week {weekId}
-                        {cached && <span className={styles.cachedBadge}>cached</span>}
                     </span>
                 </div>
                 <div className={styles.headerActions}>
