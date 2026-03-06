@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!\", location_id as \"location_id!\", week_id, name, description,\n           on_sale_ingredients, additional_ingredients, estimated_savings, fetched_at\n           FROM meal_ideas WHERE location_id = ? AND week_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "location_id!",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "week_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "on_sale_ingredients",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "additional_ingredients",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "estimated_savings",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "fetched_at",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "edaac3c51b9f1c5942e28854599770d7d08af33f3fcc19003c102e36ed4f3eeb"
+}

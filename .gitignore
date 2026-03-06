@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+target/
+client/dist/
+
+# Environment
+server/.env
+*.env.local
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Planning (not part of the project)
+plan.md

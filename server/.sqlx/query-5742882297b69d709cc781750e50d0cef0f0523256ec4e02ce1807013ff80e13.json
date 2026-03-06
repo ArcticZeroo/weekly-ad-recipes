@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM meal_ideas WHERE location_id = ? AND week_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "5742882297b69d709cc781750e50d0cef0f0523256ec4e02ce1807013ff80e13"
+}

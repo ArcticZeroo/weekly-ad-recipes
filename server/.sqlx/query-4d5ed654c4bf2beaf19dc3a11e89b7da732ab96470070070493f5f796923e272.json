@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO store_locations (chain_id, name, address, zip_code,\n           flipp_merchant_id, flipp_merchant_name, weekly_ad_url)\n           VALUES (?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "4d5ed654c4bf2beaf19dc3a11e89b7da732ab96470070070493f5f796923e272"
+}

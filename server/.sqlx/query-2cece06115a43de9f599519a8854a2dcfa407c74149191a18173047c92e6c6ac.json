@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO deals (location_id, week_id, item_name, brand,\n               deal_description, category, image_url)\n               VALUES (?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "2cece06115a43de9f599519a8854a2dcfa407c74149191a18173047c92e6c6ac"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM deals WHERE location_id = ? AND week_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "3288968029d99c31107549308af786d8f130637c1353c53c67d05c57d24b3a29"
+}
