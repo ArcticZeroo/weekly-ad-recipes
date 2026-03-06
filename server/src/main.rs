@@ -42,21 +42,16 @@ async fn main() {
     let app = Router::new()
         .route("/api/health", get(health))
         .route("/api/chains", get(routes::chains::list_chains))
-        .route("/api/locations", get(routes::locations::list_locations))
         .route(
             "/api/locations/search",
             get(routes::locations::search_locations),
         )
+        .route("/api/deals/:chain/:zip", get(routes::deals::get_deals))
         .route(
-            "/api/locations/resolve",
-            post(routes::locations::resolve_location),
-        )
-        .route("/api/deals/:location_id", get(routes::deals::get_deals))
-        .route(
-            "/api/deals/:location_id/refresh",
+            "/api/deals/:chain/:zip/refresh",
             post(routes::deals::refresh_deals),
         )
-        .route("/api/meals/:location_id", get(routes::meals::get_meals))
+        .route("/api/meals/:chain/:zip", get(routes::meals::get_meals))
         .fallback_service(
             ServeDir::new("../client/dist")
                 .not_found_service(ServeFile::new("../client/dist/index.html")),

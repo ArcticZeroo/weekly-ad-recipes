@@ -7,19 +7,6 @@ use crate::models::meal::MealIdea;
 
 // ---- Store Locations ----
 
-pub async fn list_locations(pool: &SqlitePool) -> Result<Vec<StoreLocation>, AppError> {
-    let locations = sqlx::query_as!(
-        StoreLocation,
-        r#"SELECT id as "id!", chain_id, name, address, zip_code,
-           flipp_merchant_id, flipp_merchant_name, weekly_ad_url, created_at
-           FROM store_locations ORDER BY created_at DESC"#
-    )
-    .fetch_all(pool)
-    .await?;
-
-    Ok(locations)
-}
-
 pub async fn get_location(pool: &SqlitePool, id: i64) -> Result<StoreLocation, AppError> {
     sqlx::query_as!(
         StoreLocation,

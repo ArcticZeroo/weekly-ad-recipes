@@ -32,8 +32,7 @@ const groupDealsByCategory = (deals: Deal[]): Map<string, Deal[]> => {
 };
 
 const DealsPage: React.FC = () => {
-    const { locationId } = useParams<{ locationId: string }>();
-    const parsedLocationId = Number(locationId);
+    const { chain, zip } = useParams<{ chain: string; zip: string }>();
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [refreshedData, setRefreshedData] = useState<DealsResponse | null>(null);
     const [refreshError, setRefreshError] = useState<string | null>(null);
@@ -44,8 +43,8 @@ const DealsPage: React.FC = () => {
     const [loadingElapsed, setLoadingElapsed] = useState(false);
 
     const retrieveDeals = useCallback(
-        () => fetchDeals(parsedLocationId),
-        [parsedLocationId],
+        () => fetchDeals(chain!, zip!),
+        [chain, zip],
     );
 
     const response = useImmediatePromiseState(retrieveDeals);
@@ -125,7 +124,7 @@ const DealsPage: React.FC = () => {
         setIsRefreshing(true);
         setRefreshError(null);
         try {
-            const freshData = await refreshDeals(parsedLocationId);
+            const freshData = await refreshDeals(chain!, zip!);
             setRefreshedData(freshData);
             setActiveCategory(null);
         } catch (error) {
@@ -192,7 +191,7 @@ const DealsPage: React.FC = () => {
                     <button onClick={handleRefresh} disabled={isRefreshing}>
                         {isRefreshing ? 'Refreshing...' : 'Refresh'}
                     </button>
-                    <Link to={`/${parsedLocationId}/meals`}>
+                    <Link to={`/${chain}/${zip}/meals`}>
                         <button className={styles.viewMealsButton}>View Meals</button>
                     </Link>
                 </div>

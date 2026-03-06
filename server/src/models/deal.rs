@@ -20,8 +20,8 @@ pub struct Deal {
 #[derive(Debug, Serialize, TS)]
 #[ts(export, export_to = "../client/src/models/generated/")]
 pub struct DealsResponse {
-    #[ts(type = "number")]
-    pub location_id: i64,
+    pub chain_id: String,
+    pub zip_code: String,
     pub week_id: String,
     pub deals: Vec<Deal>,
     pub cached: bool,

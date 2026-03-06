@@ -20,8 +20,8 @@ pub struct MealIdea {
 #[derive(Debug, Serialize, TS)]
 #[ts(export, export_to = "../client/src/models/generated/")]
 pub struct MealsResponse {
-    #[ts(type = "number")]
-    pub location_id: i64,
+    pub chain_id: String,
+    pub zip_code: String,
     pub week_id: String,
     pub meals: Vec<MealIdea>,
     pub cached: bool,

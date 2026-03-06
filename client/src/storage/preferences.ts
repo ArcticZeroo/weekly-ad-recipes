@@ -1,35 +1,49 @@
-const FAVORITE_LOCATIONS_KEY = 'favoriteLocationIds';
+const FAVORITE_LOCATIONS_KEY = 'favoriteLocations';
 
-export const getFavoriteLocationIds = (): Set<number> => {
+export interface IFavoriteLocation {
+    chainId: string;
+    zipCode: string;
+}
+
+export const getFavoriteLocations = (): IFavoriteLocation[] => {
     const value = localStorage.getItem(FAVORITE_LOCATIONS_KEY);
     if (value == null) {
-        return new Set();
+        return [];
     }
     try {
         const parsed: unknown = JSON.parse(value);
         if (Array.isArray(parsed)) {
-            return new Set(parsed.filter((item): item is number => typeof item === 'number'));
+            return parsed.filter(
+                (item): item is IFavoriteLocation =>
+                    typeof item === 'object' &&
+                    item != null &&
+                    typeof (item as Record<string, unknown>).chainId === 'string' &&
+                    typeof (item as Record<string, unknown>).zipCode === 'string',
+            );
         }
     } catch {
         // ignore
     }
-    return new Set();
+    return [];
 };
 
-export const saveFavoriteLocationIds = (ids: Set<number>): void => {
-    localStorage.setItem(FAVORITE_LOCATIONS_KEY, JSON.stringify([...ids]));
+const saveFavoriteLocations = (favorites: IFavoriteLocation[]): void => {
+    localStorage.setItem(FAVORITE_LOCATIONS_KEY, JSON.stringify(favorites));
 };
 
-export const addFavoriteLocation = (locationId: number): Set<number> => {
-    const favorites = getFavoriteLocationIds();
-    favorites.add(locationId);
-    saveFavoriteLocationIds(favorites);
+export const addFavoriteLocation = (chainId: string, zipCode: string): IFavoriteLocation[] => {
+    const favorites = getFavoriteLocations();
+    if (!favorites.some((favorite) => favorite.chainId === chainId && favorite.zipCode === zipCode)) {
+        favorites.push({ chainId, zipCode });
+        saveFavoriteLocations(favorites);
+    }
     return favorites;
 };
 
-export const removeFavoriteLocation = (locationId: number): Set<number> => {
-    const favorites = getFavoriteLocationIds();
-    favorites.delete(locationId);
-    saveFavoriteLocationIds(favorites);
+export const removeFavoriteLocation = (chainId: string, zipCode: string): IFavoriteLocation[] => {
+    const favorites = getFavoriteLocations().filter(
+        (favorite) => !(favorite.chainId === chainId && favorite.zipCode === zipCode),
+    );
+    saveFavoriteLocations(favorites);
     return favorites;
 };

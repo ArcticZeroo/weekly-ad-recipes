@@ -5,19 +5,21 @@ use crate::db::queries;
 use crate::error::AppError;
 use crate::fetcher::flipp;
 use crate::models::deal::DealsResponse;
+use crate::routes::locations::resolve_or_create_location;
 use crate::AppState;
 
 pub async fn get_deals(
     State(state): State<AppState>,
-    Path(location_id): Path<i64>,
+    Path((chain, zip)): Path<(String, String)>,
 ) -> Result<Json<DealsResponse>, AppError> {
-    let location = queries::get_location(&state.pool, location_id).await?;
+    let location = resolve_or_create_location(&state, &chain, &zip).await?;
     let week_id = queries::current_week_id();
 
     // Check cache
-    if let Some(deals) = queries::get_cached_deals(&state.pool, location_id, &week_id).await? {
+    if let Some(deals) = queries::get_cached_deals(&state.pool, location.id, &week_id).await? {
         return Ok(Json(DealsResponse {
-            location_id,
+            chain_id: chain,
+            zip_code: zip,
             week_id,
             deals,
             cached: true,
@@ -29,7 +31,8 @@ pub async fn get_deals(
         let deals =
             fetch_and_cache_flipp_deals(&state, &location, &week_id).await?;
         return Ok(Json(DealsResponse {
-            location_id,
+            chain_id: chain,
+            zip_code: zip,
             week_id,
             deals,
             cached: false,
@@ -39,7 +42,8 @@ pub async fn get_deals(
     // Vision fallback for non-Flipp stores (e.g. Whole Foods)
     let deals = fetch_and_cache_vision_deals(&state, &location, &week_id).await?;
     Ok(Json(DealsResponse {
-        location_id,
+        chain_id: chain,
+        zip_code: zip,
         week_id,
         deals,
         cached: false,
@@ -48,16 +52,17 @@ pub async fn get_deals(
 
 pub async fn refresh_deals(
     State(state): State<AppState>,
-    Path(location_id): Path<i64>,
+    Path((chain, zip)): Path<(String, String)>,
 ) -> Result<Json<DealsResponse>, AppError> {
-    let location = queries::get_location(&state.pool, location_id).await?;
+    let location = resolve_or_create_location(&state, &chain, &zip).await?;
     let week_id = queries::current_week_id();
 
     if location.flipp_merchant_id.is_some() {
         let deals =
             fetch_and_cache_flipp_deals(&state, &location, &week_id).await?;
         return Ok(Json(DealsResponse {
-            location_id,
+            chain_id: chain,
+            zip_code: zip,
             week_id,
             deals,
             cached: false,
@@ -67,7 +72,8 @@ pub async fn refresh_deals(
     // Vision fallback for non-Flipp stores
     let deals = fetch_and_cache_vision_deals(&state, &location, &week_id).await?;
     Ok(Json(DealsResponse {
-        location_id,
+        chain_id: chain,
+        zip_code: zip,
         week_id,
         deals,
         cached: false,

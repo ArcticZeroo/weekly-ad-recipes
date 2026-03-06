@@ -9,12 +9,11 @@ import { ErrorCard } from '../common/error-card.tsx';
 import styles from './meals-page.module.scss';
 
 const MealsPage: React.FC = () => {
-    const { locationId } = useParams<{ locationId: string }>();
-    const parsedLocationId = Number(locationId);
+    const { chain, zip } = useParams<{ chain: string; zip: string }>();
 
     const retrieveMeals = useCallback(
-        () => fetchMeals(parsedLocationId),
-        [parsedLocationId],
+        () => fetchMeals(chain!, zip!),
+        [chain, zip],
     );
 
     const response = useImmediatePromiseState(retrieveMeals);
@@ -70,7 +69,7 @@ const MealsPage: React.FC = () => {
                 <div className={styles.emptyState}>
                     <p>No meal ideas available yet.</p>
                     <p>
-                        <Link to={`/${parsedLocationId}/deals`}>View deals first</Link> — meal ideas
+                        <Link to={`/${chain}/${zip}/deals`}>View deals first</Link> — meal ideas
                         are generated from your current weekly ad deals.
                     </p>
                 </div>
@@ -88,7 +87,7 @@ const MealsPage: React.FC = () => {
                         {cached && ' · cached'}
                     </span>
                 </div>
-                <Link to={`/${parsedLocationId}/deals`}>
+                <Link to={`/${chain}/${zip}/deals`}>
                     <button>Back to Deals</button>
                 </Link>
             </div>
