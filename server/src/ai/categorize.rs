@@ -5,6 +5,7 @@ use crate::error::AppError;
 
 const MODEL: &str = "claude-haiku-4-5-20251001";
 const MAX_TOKENS: u32 = 4096;
+const BATCH_SIZE: usize = 40;
 
 const CATEGORIES: &[&str] = &[
     "produce",
@@ -21,6 +22,8 @@ const CATEGORIES: &[&str] = &[
 ];
 
 /// Batch-categorize a list of item names into grocery categories.
+/// Splits into chunks to avoid truncated responses.
+/// Feeds back discovered categories to keep naming consistent across batches.
 /// Returns a map from item name → category.
 pub async fn categorize_items(
     client: &AnthropicClient,
@@ -30,6 +33,36 @@ pub async fn categorize_items(
         return Ok(HashMap::new());
     }
 
+    let mut all_categories = HashMap::new();
+    let mut seen_categories: Vec<String> = CATEGORIES.iter().map(|s| s.to_string()).collect();
+
+    for chunk in items.chunks(BATCH_SIZE) {
+        match categorize_batch(client, chunk, &seen_categories).await {
+            Ok(batch_result) => {
+                for category in batch_result.values() {
+                    if !seen_categories.contains(category) {
+                        seen_categories.push(category.clone());
+                    }
+                }
+                all_categories.extend(batch_result);
+            }
+            Err(err) => {
+                tracing::warn!(
+                    "Categorization batch failed ({}), skipping: {err}",
+                    chunk.len()
+                );
+            }
+        }
+    }
+
+    Ok(all_categories)
+}
+
+async fn categorize_batch(
+    client: &AnthropicClient,
+    items: &[(String, Option<String>)],
+    known_categories: &[String],
+) -> Result<HashMap<String, String>, AppError> {
     let item_list: String = items
         .iter()
         .enumerate()
@@ -43,7 +76,7 @@ pub async fn categorize_items(
         .collect::<Vec<_>>()
         .join("\n");
 
-    let categories = CATEGORIES.join(", ");
+    let categories = known_categories.join(", ");
 
     let prompt = format!(
         r#"Categorize each grocery item into exactly one category. Categories: {categories}
@@ -55,24 +88,33 @@ Easter decorations, flowers, household items, etc. Alcohol and beverages should 
 Items:
 {item_list}
 
-Respond with ONLY a JSON object mapping item names (exactly as given, without the number prefix) to their category. Example:
-{{"Bananas": "produce", "Chicken Breast": "meat", "Dial Hand Soap": "not_food"}}
+Respond with ONLY a JSON object mapping each item number to its category. Example:
+{{"1": "produce", "2": "meat", "3": "not_food"}}
 
-Important: Use the exact item names from the list. Output only the JSON object, no other text."#
+You MUST include an entry for every item number from 1 to {count}. Output only the JSON object."#,
+        count = items.len()
     );
 
     let response = client.send_message(MODEL, MAX_TOKENS, &prompt).await?;
 
-    // Parse JSON from response, handling potential markdown code blocks
     let json_str = extract_json(&response);
 
-    let categories: HashMap<String, String> =
+    let by_number: HashMap<String, String> =
         serde_json::from_str(json_str).map_err(|err| {
             tracing::warn!("Failed to parse categorization response: {err}\nResponse: {response}");
             AppError::Ai(format!("Failed to parse categories: {err}"))
         })?;
 
-    Ok(categories)
+    // Map from number-based keys back to item names
+    let mut result = HashMap::new();
+    for (i, (name, _)) in items.iter().enumerate() {
+        let key = (i + 1).to_string();
+        if let Some(category) = by_number.get(&key) {
+            result.insert(name.clone(), category.clone());
+        }
+    }
+
+    Ok(result)
 }
 
 fn extract_json(text: &str) -> &str {
