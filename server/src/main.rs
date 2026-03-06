@@ -1,6 +1,7 @@
 mod config;
 mod db;
 mod error;
+mod fetcher;
 mod models;
 mod routes;
 

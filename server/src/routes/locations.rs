@@ -5,6 +5,7 @@ use sqlx::SqlitePool;
 
 use crate::db::queries;
 use crate::error::AppError;
+use crate::fetcher::flipp;
 use crate::models::location::{CreateLocationRequest, StoreLocation};
 
 pub async fn list_locations(
@@ -37,8 +38,8 @@ pub struct SearchQuery {
 
 pub async fn search_locations(
     Query(query): Query<SearchQuery>,
-) -> Result<Json<Vec<serde_json::Value>>, AppError> {
-    // Placeholder: will be implemented in Phase 3 (Flipp integration)
-    let _ = query.zip;
-    Ok(Json(vec![]))
+) -> Result<Json<Vec<flipp::FlippStoreMatch>>, AppError> {
+    let client = reqwest::Client::new();
+    let matches = flipp::search_flyers_by_zip(&client, &query.zip).await?;
+    Ok(Json(matches))
 }
