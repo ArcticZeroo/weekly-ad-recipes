@@ -1,23 +1,22 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { PromiseStage, useImmediatePromiseState } from '@arcticzeroo/react-promise-hook';
-import { fetchLocations } from '../../api/client.ts';
+import { fetchLocations, getCachedLocations } from '../../api/client.ts';
 import { LoadingSpinner } from '../common/loading-spinner.tsx';
 import { ErrorCard } from '../common/error-card.tsx';
 import styles from './home-page.module.scss';
 
 const HomePage: React.FC = () => {
     const locationsResponse = useImmediatePromiseState(fetchLocations);
+    const locations = locationsResponse.value ?? getCachedLocations();
 
-    if (locationsResponse.stage === PromiseStage.error) {
+    if (locationsResponse.stage === PromiseStage.error && locations == null) {
         return <ErrorCard message="Unable to load locations." onRetry={locationsResponse.run} />;
     }
 
-    if (locationsResponse.value == null) {
+    if (locations == null) {
         return <LoadingSpinner />;
     }
-
-    const locations = locationsResponse.value;
 
     if (locations.length === 0) {
         return (

@@ -30,9 +30,19 @@ export const fetchChains = async (): Promise<StoreChain[]> => {
     return fetchJson<StoreChain[]>('/api/chains');
 };
 
-// Store locations
+// Store locations — cached in memory to avoid re-fetch on every navigation
+let locationsCache: StoreLocation[] | null = null;
+
 export const fetchLocations = async (): Promise<StoreLocation[]> => {
-    return fetchJson<StoreLocation[]>('/api/locations');
+    const fresh = await fetchJson<StoreLocation[]>('/api/locations');
+    locationsCache = fresh;
+    return fresh;
+};
+
+export const getCachedLocations = (): StoreLocation[] | null => locationsCache;
+
+export const invalidateLocationsCache = (): void => {
+    locationsCache = null;
 };
 
 export interface IAddLocationRequest {
@@ -46,11 +56,13 @@ export interface IAddLocationRequest {
 }
 
 export const addLocation = async (location: IAddLocationRequest): Promise<StoreLocation> => {
-    return fetchJson<StoreLocation>('/api/locations', {
+    const result = await fetchJson<StoreLocation>('/api/locations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(location),
     });
+    invalidateLocationsCache();
+    return result;
 };
 
 export const deleteLocation = async (locationId: number): Promise<void> => {
@@ -62,6 +74,8 @@ export const deleteLocation = async (locationId: number): Promise<void> => {
         const text = await response.text().catch(() => response.statusText);
         throw new Error(`Request failed (${response.status}): ${text}`);
     }
+
+    invalidateLocationsCache();
 };
 
 export const searchLocations = async (zipCode: string): Promise<IFlippStoreMatch[]> => {
