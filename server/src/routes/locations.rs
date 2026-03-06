@@ -21,25 +21,11 @@ pub struct SearchQuery {
 }
 
 /// Search for stores by zip code. Returns lightweight results without DB writes.
-/// Includes non-Flipp chains (Whole Foods) alongside Flipp results.
 pub async fn search_locations(
     Query(query): Query<SearchQuery>,
 ) -> Result<Json<Vec<flipp::FlippStoreMatch>>, AppError> {
     let client = reqwest::Client::new();
-    let mut matches = flipp::search_flyers_by_zip(&client, &query.zip).await?;
-
-    // Always include Whole Foods (not on Flipp)
-    matches.push(flipp::FlippStoreMatch {
-        chain_id: "whole-foods".to_string(),
-        chain_name: "Whole Foods".to_string(),
-        flyer_id: None,
-        merchant_id: None,
-        merchant_name: "Whole Foods Market".to_string(),
-        store_name: None,
-        valid_from: None,
-        valid_to: None,
-    });
-
+    let matches = flipp::search_flyers_by_zip(&client, &query.zip).await?;
     Ok(Json(matches))
 }
 
