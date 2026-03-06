@@ -5,6 +5,18 @@ import { LoadingSpinner } from '../common/loading-spinner.tsx';
 import { ErrorCard } from '../common/error-card.tsx';
 import styles from './settings-page.module.scss';
 
+const formatDate = (isoString: string): string => {
+    const date = new Date(isoString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+const formatDateRange = (from: string | null, to: string | null): string => {
+    if (from && to) {
+        return `Valid ${formatDate(from)} – ${formatDate(to)}`;
+    }
+    return '';
+};
+
 const SettingsPage: React.FC = () => {
     const [zipCode, setZipCode] = useState('');
     const [addingMatchIndex, setAddingMatchIndex] = useState<number | null>(null);
@@ -34,7 +46,7 @@ const SettingsPage: React.FC = () => {
         try {
             await addLocation({
                 chain_id: match.chain_id,
-                name: match.store_name ?? match.merchant_name,
+                name: `${match.chain_name} - ${zipCode}`,
                 zip_code: zipCode,
                 flipp_merchant_id: match.merchant_id ?? undefined,
                 flipp_merchant_name: match.merchant_name,
@@ -102,10 +114,7 @@ const SettingsPage: React.FC = () => {
                                             {match.store_name && ` — ${match.store_name}`}
                                         </span>
                                         <span className={styles.resultMeta}>
-                                            {match.merchant_name}
-                                            {match.valid_from && match.valid_to && (
-                                                <> · Valid {match.valid_from} to {match.valid_to}</>
-                                            )}
+                                            {formatDateRange(match.valid_from, match.valid_to)}
                                         </span>
                                     </div>
                                     <button

@@ -20,6 +20,7 @@ struct FlippFlyerResponse {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct FlippFlyer {
     pub id: i64,
     pub merchant_id: Option<i64>,
@@ -32,6 +33,7 @@ pub struct FlippFlyer {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct FlippItem {
     pub id: Option<i64>,
     pub name: Option<String>,
@@ -63,7 +65,8 @@ fn generate_session_id() -> String {
     digits
 }
 
-/// Search Flipp for weekly ad flyers near a zip code, returning matches for supported chains
+/// Search Flipp for weekly ad flyers near a zip code, returning matches for supported chains.
+/// Deduplicates by chain, keeping only the best grocery flyer per chain.
 pub async fn search_flyers_by_zip(
     client: &reqwest::Client,
     zip: &str,
@@ -76,11 +79,12 @@ pub async fn search_flyers_by_zip(
         .json()
         .await?;
 
-    let mut matches = Vec::new();
+    let mut best_by_chain: std::collections::HashMap<String, (FlippStoreMatch, i32)> =
+        std::collections::HashMap::new();
 
     for flyer in &response.flyers {
         let merchant_name = match &flyer.merchant {
-            Some(name) => name,
+            Some(name) => name.trim(),
             None => continue,
         };
 
@@ -90,22 +94,50 @@ pub async fn search_flyers_by_zip(
                     .to_lowercase()
                     .contains(&chain_display.to_lowercase())
             {
-                matches.push(FlippStoreMatch {
+                let flyer_name = flyer.name.as_deref().unwrap_or("").to_lowercase();
+                let priority = flyer_priority(&flyer_name);
+
+                let candidate = FlippStoreMatch {
                     chain_id: chain_id.to_string(),
                     chain_name: chain_display.to_string(),
                     flyer_id: flyer.id,
                     merchant_id: flyer.merchant_id,
-                    merchant_name: merchant_name.clone(),
+                    merchant_name: merchant_name.to_string(),
                     store_name: flyer.name.clone(),
                     valid_from: flyer.valid_from.clone(),
                     valid_to: flyer.valid_to.clone(),
-                });
+                };
+
+                let key = chain_id.to_string();
+                if let Some((_existing, existing_priority)) = best_by_chain.get(&key) {
+                    if priority > *existing_priority {
+                        best_by_chain.insert(key, (candidate, priority));
+                    }
+                } else {
+                    best_by_chain.insert(key, (candidate, priority));
+                }
+
                 break;
             }
         }
     }
 
+    let matches: Vec<FlippStoreMatch> = best_by_chain.into_values().map(|(m, _)| m).collect();
     Ok(matches)
+}
+
+/// Higher priority = more likely to be the main grocery weekly ad
+fn flyer_priority(flyer_name: &str) -> i32 {
+    if flyer_name.contains("weekly ad") || flyer_name.contains("weekly circular") {
+        10
+    } else if flyer_name.contains("weekly") {
+        5
+    } else if flyer_name.contains("flyer") || flyer_name.contains("circular") {
+        3
+    } else {
+        // "Home & Apparel", "Big Book of Savings", etc.
+        1
+    }
 }
 
 /// Fetch all items from a specific Flipp flyer
