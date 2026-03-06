@@ -84,8 +84,8 @@ async fn fetch_and_cache_flipp_deals(
             || f.chain_id == location.chain_id
     });
 
-    let flyer_id = match flyer {
-        Some(f) => f.flyer_id,
+    let flyer_id = match flyer.and_then(|f| f.flyer_id) {
+        Some(id) => id,
         None => {
             tracing::warn!(
                 "No current flyer found for location {} (chain: {})",

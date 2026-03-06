@@ -21,11 +21,25 @@ pub struct SearchQuery {
 }
 
 /// Search for stores by zip code. Returns lightweight results without DB writes.
+/// Includes non-Flipp chains (Whole Foods) alongside Flipp results.
 pub async fn search_locations(
     Query(query): Query<SearchQuery>,
 ) -> Result<Json<Vec<flipp::FlippStoreMatch>>, AppError> {
     let client = reqwest::Client::new();
-    let matches = flipp::search_flyers_by_zip(&client, &query.zip).await?;
+    let mut matches = flipp::search_flyers_by_zip(&client, &query.zip).await?;
+
+    // Always include Whole Foods (not on Flipp)
+    matches.push(flipp::FlippStoreMatch {
+        chain_id: "whole-foods".to_string(),
+        chain_name: "Whole Foods".to_string(),
+        flyer_id: None,
+        merchant_id: None,
+        merchant_name: "Whole Foods Market".to_string(),
+        store_name: None,
+        valid_from: None,
+        valid_to: None,
+    });
+
     Ok(Json(matches))
 }
 
@@ -39,26 +53,21 @@ pub struct ResolveRequest {
 }
 
 /// Find-or-create a location record, returning the stable ID.
-/// Called when a user favorites or clicks into a store.
-/// Deduplicates by flipp_merchant_id so the same chain across
-/// nearby zip codes resolves to a single location.
+/// Keyed on (chain_id, zip_code) — same chain in different regions
+/// may have slightly different flyers.
 pub async fn resolve_location(
     State(state): State<AppState>,
     Json(req): Json<ResolveRequest>,
 ) -> Result<Json<StoreLocation>, AppError> {
-    // Check if this merchant already has a location record
-    if let Some(merchant_id) = req.flipp_merchant_id {
-        if let Some(existing) =
-            queries::find_location_by_merchant(&state.pool, merchant_id).await?
-        {
-            return Ok(Json(existing));
-        }
+    if let Some(existing) =
+        queries::find_location_by_chain_zip(&state.pool, &req.chain_id, &req.zip_code).await?
+    {
+        return Ok(Json(existing));
     }
 
-    // Create it
     let create_req = CreateLocationRequest {
         chain_id: req.chain_id.clone(),
-        name: req.chain_name.clone(),
+        name: format!("{} - {}", req.chain_name, req.zip_code),
         address: None,
         zip_code: req.zip_code,
         flipp_merchant_id: req.flipp_merchant_id,

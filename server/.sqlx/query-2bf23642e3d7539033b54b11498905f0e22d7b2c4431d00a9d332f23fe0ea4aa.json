@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id as \"id!\", chain_id, name, address, zip_code,\n           flipp_merchant_id, flipp_merchant_name, weekly_ad_url, created_at\n           FROM store_locations WHERE flipp_merchant_id = ?",
+  "query": "SELECT id as \"id!\", chain_id, name, address, zip_code,\n           flipp_merchant_id, flipp_merchant_name, weekly_ad_url, created_at\n           FROM store_locations WHERE chain_id = ? AND zip_code = ?",
   "describe": {
     "columns": [
       {
@@ -50,10 +50,10 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
-      false,
+      true,
       false,
       false,
       true,
@@ -64,5 +64,5 @@
       false
     ]
   },
-  "hash": "686373b0faf4700b0d83e87840bc4a34248a0a67ba11b2f1d891c0dabeee5f63"
+  "hash": "2bf23642e3d7539033b54b11498905f0e22d7b2c4431d00a9d332f23fe0ea4aa"
 }

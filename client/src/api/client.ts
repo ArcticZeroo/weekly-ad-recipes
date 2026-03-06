@@ -6,7 +6,7 @@ import type { StoreLocation } from '../models/generated/StoreLocation.ts';
 export interface IFlippStoreMatch {
     chain_id: string;
     chain_name: string;
-    flyer_id: number;
+    flyer_id: number | null;
     merchant_id: number | null;
     merchant_name: string;
     store_name: string | null;

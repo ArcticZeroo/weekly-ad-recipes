@@ -47,12 +47,12 @@ pub struct FlippItem {
     pub valid_to: Option<String>,
 }
 
-/// Result from searching Flipp for stores near a zip code
+/// Result from searching for stores near a zip code
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct FlippStoreMatch {
     pub chain_id: String,
     pub chain_name: String,
-    pub flyer_id: i64,
+    pub flyer_id: Option<i64>,
     pub merchant_id: Option<i64>,
     pub merchant_name: String,
     pub store_name: Option<String>,
@@ -101,7 +101,7 @@ pub async fn search_flyers_by_zip(
                 let candidate = FlippStoreMatch {
                     chain_id: chain_id.to_string(),
                     chain_name: chain_display.to_string(),
-                    flyer_id: flyer.id,
+                    flyer_id: Some(flyer.id),
                     merchant_id: flyer.merchant_id,
                     merchant_name: merchant_name.to_string(),
                     store_name: flyer.name.clone(),
