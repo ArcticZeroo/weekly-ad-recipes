@@ -3,6 +3,7 @@ mod config;
 mod db;
 mod error;
 mod fetcher;
+mod inflight;
 mod models;
 mod routes;
 
@@ -17,6 +18,8 @@ use crate::ai::client::AnthropicClient;
 pub struct AppState {
     pub pool: sqlx::SqlitePool,
     pub ai: std::sync::Arc<AnthropicClient>,
+    pub deals_tracker: inflight::InFlightTracker,
+    pub meals_tracker: inflight::InFlightTracker,
 }
 
 #[tokio::main]
@@ -37,7 +40,12 @@ async fn main() {
 
     let ai = std::sync::Arc::new(AnthropicClient::new(config.anthropic_api_key));
 
-    let state = AppState { pool, ai };
+    let state = AppState {
+        pool,
+        ai,
+        deals_tracker: inflight::InFlightTracker::new(),
+        meals_tracker: inflight::InFlightTracker::new(),
+    };
 
     let app = Router::new()
         .route("/api/health", get(health))

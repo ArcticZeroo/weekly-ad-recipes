@@ -4,7 +4,9 @@ use axum::Json;
 use crate::db::queries;
 use crate::error::AppError;
 use crate::fetcher::flipp;
-use crate::models::deal::DealsResponse;
+use crate::inflight::AcquireResult;
+use crate::models::deal::{Deal, DealsResponse};
+use crate::models::location::StoreLocation;
 use crate::routes::locations::resolve_or_create_location;
 use crate::AppState;
 
@@ -15,39 +17,8 @@ pub async fn get_deals(
     let location = resolve_or_create_location(&state, &chain, &zip).await?;
     let week_id = queries::current_week_id();
 
-    // Check cache
-    if let Some(deals) = queries::get_cached_deals(&state.pool, location.id, &week_id).await? {
-        return Ok(Json(DealsResponse {
-            chain_id: chain,
-            zip_code: zip,
-            week_id,
-            deals,
-            cached: true,
-        }));
-    }
-
-    // Fetch from Flipp if this location has a merchant ID
-    if location.flipp_merchant_id.is_some() {
-        let deals =
-            fetch_and_cache_flipp_deals(&state, &location, &week_id).await?;
-        return Ok(Json(DealsResponse {
-            chain_id: chain,
-            zip_code: zip,
-            week_id,
-            deals,
-            cached: false,
-        }));
-    }
-
-    // Vision fallback for non-Flipp stores (e.g. Whole Foods)
-    let deals = fetch_and_cache_vision_deals(&state, &location, &week_id).await?;
-    Ok(Json(DealsResponse {
-        chain_id: chain,
-        zip_code: zip,
-        week_id,
-        deals,
-        cached: false,
-    }))
+    let (deals, cached) = ensure_deals(&state, &location, &week_id).await?;
+    Ok(Json(DealsResponse { chain_id: chain, zip_code: zip, week_id, deals, cached }))
 }
 
 pub async fn refresh_deals(
@@ -57,34 +28,64 @@ pub async fn refresh_deals(
     let location = resolve_or_create_location(&state, &chain, &zip).await?;
     let week_id = queries::current_week_id();
 
-    if location.flipp_merchant_id.is_some() {
-        let deals =
-            fetch_and_cache_flipp_deals(&state, &location, &week_id).await?;
-        return Ok(Json(DealsResponse {
-            chain_id: chain,
-            zip_code: zip,
-            week_id,
-            deals,
-            cached: false,
-        }));
-    }
+    // Invalidate cache so the loop below is forced to re-fetch.
+    // Concurrent refreshes race to delete (idempotent), then one becomes
+    // the leader and the rest wait and read the freshly cached result.
+    queries::invalidate_deals_cache(&state.pool, location.id, &week_id).await?;
 
-    // Vision fallback for non-Flipp stores
-    let deals = fetch_and_cache_vision_deals(&state, &location, &week_id).await?;
-    Ok(Json(DealsResponse {
-        chain_id: chain,
-        zip_code: zip,
-        week_id,
-        deals,
-        cached: false,
-    }))
+    let (deals, _) = ensure_deals(&state, &location, &week_id).await?;
+    Ok(Json(DealsResponse { chain_id: chain, zip_code: zip, week_id, deals, cached: false }))
+}
+
+/// Returns deals from cache or fetches them, deduplicating concurrent requests
+/// so only one fetch runs at a time for a given location+week.
+///
+/// Returns `(deals, was_from_cache)`.
+async fn ensure_deals(
+    state: &AppState,
+    location: &StoreLocation,
+    week_id: &str,
+) -> Result<(Vec<Deal>, bool), AppError> {
+    let key = format!("{}:{}", location.id, week_id);
+
+    loop {
+        if let Some(deals) = queries::get_cached_deals(&state.pool, location.id, week_id).await? {
+            return Ok((deals, true));
+        }
+
+        match state.deals_tracker.try_acquire(&key) {
+            AcquireResult::Wait(notify) => {
+                tracing::debug!("Deals fetch already in-flight for {key}, waiting");
+                notify.notified().await;
+                // Re-check cache on next iteration
+            }
+            AcquireResult::Lead(guard) => {
+                let deals = fetch_deals_from_source(state, location, week_id).await?;
+                drop(guard); // Unblocks any waiters
+                return Ok((deals, false));
+            }
+        }
+    }
+}
+
+/// Dispatches to the appropriate fetch strategy (Flipp or Vision).
+async fn fetch_deals_from_source(
+    state: &AppState,
+    location: &StoreLocation,
+    week_id: &str,
+) -> Result<Vec<Deal>, AppError> {
+    if location.flipp_merchant_id.is_some() {
+        fetch_and_cache_flipp_deals(state, location, week_id).await
+    } else {
+        fetch_and_cache_vision_deals(state, location, week_id).await
+    }
 }
 
 async fn fetch_and_cache_flipp_deals(
     state: &AppState,
-    location: &crate::models::location::StoreLocation,
+    location: &StoreLocation,
     week_id: &str,
-) -> Result<Vec<crate::models::deal::Deal>, AppError> {
+) -> Result<Vec<Deal>, AppError> {
     let client = reqwest::Client::new();
 
     let flyers = flipp::search_flyers_by_zip(&client, &location.zip_code).await?;
@@ -182,9 +183,9 @@ async fn fetch_and_cache_flipp_deals(
 
 async fn fetch_and_cache_vision_deals(
     state: &AppState,
-    location: &crate::models::location::StoreLocation,
+    location: &StoreLocation,
     week_id: &str,
-) -> Result<Vec<crate::models::deal::Deal>, AppError> {
+) -> Result<Vec<Deal>, AppError> {
     let deal_tuples = match location.chain_id.as_str() {
         "whole-foods" => fetch_whole_foods_deals(state, location).await?,
         _ => fetch_generic_vision_deals(state, location).await?,
@@ -206,7 +207,7 @@ async fn fetch_and_cache_vision_deals(
 /// Try structured __NEXT_DATA__ scrape first, fall back to Vision screenshots.
 async fn fetch_whole_foods_deals(
     state: &AppState,
-    location: &crate::models::location::StoreLocation,
+    location: &StoreLocation,
 ) -> Result<Vec<(String, Option<String>, String, String, Option<String>)>, AppError> {
     // Extract WFM store ID from weekly_ad_url or use a default
     let wfm_store_id = location
@@ -272,7 +273,7 @@ async fn fetch_whole_foods_deals(
 
 async fn fetch_generic_vision_deals(
     state: &AppState,
-    location: &crate::models::location::StoreLocation,
+    location: &StoreLocation,
 ) -> Result<Vec<(String, Option<String>, String, String, Option<String>)>, AppError> {
     let url = match location.weekly_ad_url.as_deref() {
         Some(url) => url.to_string(),

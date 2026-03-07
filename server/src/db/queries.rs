@@ -96,6 +96,21 @@ pub async fn get_cached_deals(
     }
 }
 
+pub async fn invalidate_deals_cache(
+    pool: &SqlitePool,
+    location_id: i64,
+    week_id: &str,
+) -> Result<(), AppError> {
+    sqlx::query!(
+        "DELETE FROM deals WHERE location_id = ? AND week_id = ?",
+        location_id,
+        week_id
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn save_deals(
     pool: &SqlitePool,
     location_id: i64,
