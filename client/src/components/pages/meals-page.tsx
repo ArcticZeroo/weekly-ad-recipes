@@ -1,12 +1,12 @@
 import React, { useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { PromiseStage, useImmediatePromiseState } from '@arcticzeroo/react-promise-hook';
+import { Box, Button, Card, CardContent, Chip, Skeleton, Typography } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { fetchMeals } from '../../api/client.ts';
 import { currentWeekRange, formatWeekId } from '../../util/week.ts';
 import { LoadingCard } from '../common/loading-card.tsx';
-import { Skeleton } from '../common/skeleton.tsx';
 import { ErrorCard } from '../common/error-card.tsx';
-import styles from './meals-page.module.scss';
 
 const MealsPage: React.FC = () => {
     const { chain, zip } = useParams<{ chain: string; zip: string }>();
@@ -24,44 +24,49 @@ const MealsPage: React.FC = () => {
 
     if (response.value == null) {
         return (
-            <div className={`${styles.page} flex-col`}>
-                <div className={styles.header}>
-                    <div className="flex-col">
-                        <h1>Meal Ideas</h1>
-                        <span className={styles.meta}>
-                            {currentWeekRange()}
-                        </span>
-                    </div>
-                    <Link to={`/${chain}/${zip}/deals`}>
-                        <button>Back to Deals</button>
-                    </Link>
-                </div>
-                <div className={styles.mealsGrid}>
+            <Box sx={{ maxWidth: 1100, width: '100%', mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+                    <Box>
+                        <Typography variant="h4">Meal Ideas</Typography>
+                        <Typography variant="body2" color="text.secondary">{currentWeekRange()}</Typography>
+                    </Box>
+                    <Button
+                        variant="outlined"
+                        component={Link}
+                        to={`/${chain}/${zip}/deals`}
+                        startIcon={<ArrowBackIcon />}
+                    >
+                        Back to Deals
+                    </Button>
+                </Box>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 2 }}>
                     {Array.from({ length: 4 }).map((_, index) => (
-                        <div key={index} className={styles.mealCard}>
-                            <Skeleton height="1.2rem" width="65%" />
-                            <Skeleton height="2.5rem" />
-                            <div className={styles.ingredientsSection}>
-                                <Skeleton height="0.75rem" width="3rem" />
-                                <div className={styles.ingredientsList}>
-                                    <Skeleton height="1.5rem" width="5rem" borderRadius="6px" />
-                                    <Skeleton height="1.5rem" width="4rem" borderRadius="6px" />
-                                    <Skeleton height="1.5rem" width="6rem" borderRadius="6px" />
-                                </div>
-                            </div>
-                            <div className={styles.ingredientsSection}>
-                                <Skeleton height="0.75rem" width="4.5rem" />
-                                <div className={styles.ingredientsList}>
-                                    <Skeleton height="1.5rem" width="3.5rem" borderRadius="6px" />
-                                    <Skeleton height="1.5rem" width="4.5rem" borderRadius="6px" />
-                                </div>
-                            </div>
-                            <Skeleton height="0.85rem" width="7rem" />
-                        </div>
+                        <Card key={index}>
+                            <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                                <Skeleton variant="text" width="65%" height={28} />
+                                <Skeleton variant="rectangular" height={48} />
+                                <Box>
+                                    <Skeleton variant="text" width={60} height={16} />
+                                    <Box sx={{ display: 'flex', gap: 0.75, mt: 0.5, flexWrap: 'wrap' }}>
+                                        <Skeleton variant="rounded" height={24} width={80} />
+                                        <Skeleton variant="rounded" height={24} width={64} />
+                                        <Skeleton variant="rounded" height={24} width={96} />
+                                    </Box>
+                                </Box>
+                                <Box>
+                                    <Skeleton variant="text" width={80} height={16} />
+                                    <Box sx={{ display: 'flex', gap: 0.75, mt: 0.5, flexWrap: 'wrap' }}>
+                                        <Skeleton variant="rounded" height={24} width={56} />
+                                        <Skeleton variant="rounded" height={24} width={72} />
+                                    </Box>
+                                </Box>
+                                <Skeleton variant="text" width={112} height={20} />
+                            </CardContent>
+                        </Card>
                     ))}
-                </div>
+                </Box>
                 <LoadingCard message="Generating meal ideas from this week's deals..." />
-            </div>
+            </Box>
         );
     }
 
@@ -69,76 +74,101 @@ const MealsPage: React.FC = () => {
 
     if (meals.length === 0) {
         return (
-            <div className={`${styles.page} flex-col`}>
-                <h1>Meal Ideas</h1>
-                <div className={styles.emptyState}>
-                    <p>No meal ideas available yet.</p>
-                    <p>
+            <Box sx={{ maxWidth: 1100, width: '100%', mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <Typography variant="h4">Meal Ideas</Typography>
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <Typography color="text.secondary">No meal ideas available yet.</Typography>
+                    <Typography color="text.secondary" sx={{ mt: 1 }}>
                         <Link to={`/${chain}/${zip}/deals`}>View deals first</Link> — meal ideas
                         are generated from your current weekly ad deals.
-                    </p>
-                </div>
-            </div>
+                    </Typography>
+                </Box>
+            </Box>
         );
     }
 
     return (
-        <div className={`${styles.page} flex-col`}>
-            <div className={styles.header}>
-                <div className="flex-col">
-                    <h1>Meal Ideas</h1>
-                    <span className={styles.meta}>
+        <Box sx={{ maxWidth: 1100, width: '100%', mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+                <Box>
+                    <Typography variant="h4">Meal Ideas</Typography>
+                    <Typography variant="body2" color="text.secondary">
                         {meals.length} meal ideas · {formatWeekId(weekId)}
                         {cached && ' · cached'}
-                    </span>
-                </div>
-                <Link to={`/${chain}/${zip}/deals`}>
-                    <button>Back to Deals</button>
-                </Link>
-            </div>
+                    </Typography>
+                </Box>
+                <Button
+                    variant="outlined"
+                    component={Link}
+                    to={`/${chain}/${zip}/deals`}
+                    startIcon={<ArrowBackIcon />}
+                >
+                    Back to Deals
+                </Button>
+            </Box>
 
-            <div className={styles.mealsGrid}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 2 }}>
                 {meals.map((meal) => (
-                    <div key={meal.id} className={styles.mealCard}>
-                        <h3 className={styles.mealName}>{meal.name}</h3>
-                        <p className={styles.mealDescription}>{meal.description}</p>
+                    <Card key={meal.id}>
+                        <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                            <Typography variant="h6">{meal.name}</Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                                {meal.description}
+                            </Typography>
 
-                        {meal.on_sale_ingredients.length > 0 && (
-                            <div className={styles.ingredientsSection}>
-                                <span className={styles.ingredientsLabel}>On Sale</span>
-                                <div className={styles.ingredientsList}>
-                                    {meal.on_sale_ingredients.map((ingredient) => (
-                                        <span
-                                            key={ingredient}
-                                            className={`${styles.ingredientTag} ${styles.onSaleTag}`}
-                                        >
-                                            {ingredient}
-                                        </span>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                            {meal.on_sale_ingredients.length > 0 && (
+                                <Box>
+                                    <Typography
+                                        variant="caption"
+                                        fontWeight={600}
+                                        sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}
+                                    >
+                                        On Sale
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5 }}>
+                                        {meal.on_sale_ingredients.map((ingredient) => (
+                                            <Chip
+                                                key={ingredient}
+                                                label={ingredient}
+                                                size="small"
+                                                color="success"
+                                                variant="outlined"
+                                            />
+                                        ))}
+                                    </Box>
+                                </Box>
+                            )}
 
-                        {meal.additional_ingredients.length > 0 && (
-                            <div className={styles.ingredientsSection}>
-                                <span className={styles.ingredientsLabel}>Also Needed</span>
-                                <div className={styles.ingredientsList}>
-                                    {meal.additional_ingredients.map((ingredient) => (
-                                        <span key={ingredient} className={styles.ingredientTag}>
-                                            {ingredient}
-                                        </span>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                            {meal.additional_ingredients.length > 0 && (
+                                <Box>
+                                    <Typography
+                                        variant="caption"
+                                        fontWeight={600}
+                                        sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}
+                                    >
+                                        Also Needed
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5 }}>
+                                        {meal.additional_ingredients.map((ingredient) => (
+                                            <Chip
+                                                key={ingredient}
+                                                label={ingredient}
+                                                size="small"
+                                                variant="outlined"
+                                            />
+                                        ))}
+                                    </Box>
+                                </Box>
+                            )}
 
-                        <span className={styles.savings}>
-                            Estimated savings: {meal.estimated_savings}
-                        </span>
-                    </div>
+                            <Typography variant="body2" fontWeight={600} color="success.main">
+                                Estimated savings: {meal.estimated_savings}
+                            </Typography>
+                        </CardContent>
+                    </Card>
                 ))}
-            </div>
-        </div>
+            </Box>
+        </Box>
     );
 };
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import styles from './skeleton.module.scss';
+import { Skeleton as MuiSkeleton } from '@mui/material';
 
 interface ISkeletonProps {
     height?: string;
@@ -13,9 +13,12 @@ export const Skeleton: React.FC<ISkeletonProps> = ({
     borderRadius,
 }) => {
     return (
-        <div
-            className={styles.skeleton}
-            style={{ height, width, borderRadius }}
+        <MuiSkeleton
+            variant="rectangular"
+            height={height}
+            width={width}
+            animation="wave"
+            sx={{ borderRadius: borderRadius ?? 1 }}
         />
     );
 };

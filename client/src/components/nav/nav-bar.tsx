@@ -1,18 +1,42 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
-import { classNames } from '../../util/classnames.ts';
-import styles from './nav-bar.module.scss';
+import { AppBar, IconButton, Toolbar, Typography } from '@mui/material';
+import MenuIcon from '@mui/icons-material/Menu';
+import { Link } from 'react-router-dom';
 
-export const NavBar: React.FC = () => {
+interface INavBarProps {
+    onToggleSidebar: () => void;
+}
+
+export const NavBar: React.FC<INavBarProps> = ({ onToggleSidebar }) => {
     return (
-        <nav className={styles.navBar}>
-            <NavLink
-                to="/"
-                className={({ isActive }) => classNames(styles.title, isActive && styles.activeLink)}
-                end
-            >
-                Weekly Ad Recipes
-            </NavLink>
-        </nav>
+        <AppBar
+            position="fixed"
+            sx={{ zIndex: (muiTheme) => muiTheme.zIndex.drawer + 1 }}
+        >
+            <Toolbar>
+                <IconButton
+                    color="inherit"
+                    aria-label="open navigation"
+                    edge="start"
+                    onClick={onToggleSidebar}
+                    sx={{ mr: 1, display: { md: 'none' } }}
+                >
+                    <MenuIcon />
+                </IconButton>
+                <Typography
+                    variant="h6"
+                    component={Link}
+                    to="/"
+                    sx={{
+                        color: 'text.primary',
+                        textDecoration: 'none',
+                        fontWeight: 600,
+                        '&:hover': { color: 'primary.main' },
+                    }}
+                >
+                    Weekly Ad Recipes
+                </Typography>
+            </Toolbar>
+        </AppBar>
     );
 };

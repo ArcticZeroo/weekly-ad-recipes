@@ -1,37 +1,33 @@
 import React, { useCallback, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { PromiseStage, useDelayedPromiseState } from '@arcticzeroo/react-promise-hook';
-import { searchLocations, type IFlippStoreMatch } from '../../api/client.ts';
 import {
-    addFavoriteLocation,
-    getFavoriteLocations,
-    removeFavoriteLocation,
-    type IFavoriteLocation,
-} from '../../storage/preferences.ts';
-import { Skeleton } from '../common/skeleton.tsx';
+    Box,
+    Button,
+    Card,
+    CardActionArea,
+    CardContent,
+    IconButton,
+    Skeleton,
+    TextField,
+    Tooltip,
+    Typography,
+} from '@mui/material';
+import StarIcon from '@mui/icons-material/Star';
+import StarBorderIcon from '@mui/icons-material/StarBorder';
+import SearchIcon from '@mui/icons-material/Search';
+import { searchLocations, type IFlippStoreMatch } from '../../api/client.ts';
+import { useFavorites } from '../../context/favorites-context.tsx';
+import { displayChainName } from '../../util/chains.ts';
 import { ErrorCard } from '../common/error-card.tsx';
-import styles from './home-page.module.scss';
-
-const CHAIN_DISPLAY_NAMES: Record<string, string> = {
-    'qfc': 'QFC',
-    'safeway': 'Safeway',
-    'fred-meyer': 'Fred Meyer',
-    'whole-foods': 'Whole Foods',
-};
-
-const displayChainName = (chainId: string): string => {
-    return CHAIN_DISPLAY_NAMES[chainId] ?? chainId;
-};
 
 const HomePage: React.FC = () => {
     const [zipCode, setZipCode] = useState('');
-    const [favorites, setFavorites] = useState<IFavoriteLocation[]>(getFavoriteLocations);
     const [searchedZip, setSearchedZip] = useState('');
+    const { favorites, addFavorite, removeFavorite, isFavorite } = useFavorites();
+    const navigate = useNavigate();
 
-    const searchCallback = useCallback(
-        () => searchLocations(zipCode),
-        [zipCode],
-    );
+    const searchCallback = useCallback(() => searchLocations(zipCode), [zipCode]);
     const searchResponse = useDelayedPromiseState(searchCallback);
 
     const handleSearch = (event: React.FormEvent) => {
@@ -46,122 +42,159 @@ const HomePage: React.FC = () => {
     const handleToggleFavorite = (event: React.MouseEvent, chainId: string, zip: string) => {
         event.preventDefault();
         event.stopPropagation();
-
-        const isFavorited = favorites.some(
-            (favorite) => favorite.chainId === chainId && favorite.zipCode === zip,
-        );
-
-        if (isFavorited) {
-            setFavorites(removeFavoriteLocation(chainId, zip));
+        if (isFavorite(chainId, zip)) {
+            removeFavorite(chainId, zip);
         } else {
-            setFavorites(addFavoriteLocation(chainId, zip));
+            addFavorite(chainId, zip);
         }
     };
 
-    const isMatchFavorited = (match: IFlippStoreMatch): boolean => {
-        return favorites.some(
-            (favorite) => favorite.chainId === match.chain_id && favorite.zipCode === searchedZip,
-        );
-    };
+    const isMatchFavorited = (match: IFlippStoreMatch): boolean =>
+        isFavorite(match.chain_id, searchedZip);
+
+    const renderStoreCard = (
+        chainId: string,
+        zipCode: string,
+        primaryText: string,
+        secondaryText?: string,
+        isFavorited: boolean = false,
+        onToggle?: (event: React.MouseEvent) => void,
+    ) => (
+        <Card
+            key={`${chainId}-${zipCode}`}
+            variant="outlined"
+            sx={{ position: 'relative', '&:hover': { borderColor: 'primary.main' } }}
+        >
+            <CardActionArea
+                onClick={() => navigate(`/${chainId}/${zipCode}/deals`)}
+                sx={{ pr: onToggle ? 6 : undefined }}
+            >
+                <CardContent>
+                    <Typography variant="subtitle1" fontWeight={600}>
+                        {primaryText}
+                    </Typography>
+                    {secondaryText && (
+                        <Typography variant="body2" color="text.secondary">
+                            {secondaryText}
+                        </Typography>
+                    )}
+                </CardContent>
+            </CardActionArea>
+            {onToggle && (
+                <Tooltip title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}>
+                    <IconButton
+                        onClick={onToggle}
+                        sx={{
+                            position: 'absolute',
+                            right: 8,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            color: isFavorited ? 'primary.main' : 'text.secondary',
+                        }}
+                    >
+                        {isFavorited ? <StarIcon /> : <StarBorderIcon />}
+                    </IconButton>
+                </Tooltip>
+            )}
+        </Card>
+    );
 
     return (
-        <div className={`${styles.page} flex-col`}>
-            <h1>Weekly Ad Recipes</h1>
+        <Box sx={{ maxWidth: 900, width: '100%', mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <Typography variant="h4">Weekly Ad Recipes</Typography>
 
-            <form className={styles.searchForm} onSubmit={handleSearch}>
-                <input
+            <Box
+                component="form"
+                onSubmit={handleSearch}
+                sx={{ display: 'flex', gap: 1 }}
+            >
+                <TextField
                     type="text"
                     placeholder="Enter zip code to find stores"
                     value={zipCode}
                     onChange={(event) => setZipCode(event.target.value)}
-                    className={styles.searchInput}
+                    sx={{ maxWidth: 280 }}
                 />
-                <button
+                <Button
                     type="submit"
+                    variant="contained"
                     disabled={zipCode.trim().length === 0 || searchResponse.stage === PromiseStage.running}
+                    startIcon={<SearchIcon />}
                 >
                     Search
-                </button>
-            </form>
+                </Button>
+            </Box>
 
             {searchResponse.stage === PromiseStage.error && (
                 <ErrorCard message="Unable to search locations." onRetry={searchResponse.run} />
             )}
 
             {searchResponse.stage === PromiseStage.running && (
-                <div className={styles.section}>
-                    <span className={styles.searchingMessage}>Searching for stores...</span>
-                    <div className={styles.grid}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <Typography variant="body2" color="text.secondary">
+                        Searching for stores...
+                    </Typography>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 2 }}>
                         {Array.from({ length: 3 }).map((_, index) => (
-                            <Skeleton key={index} height="3.5rem" borderRadius="12px" />
+                            <Skeleton key={index} variant="rounded" height={72} />
                         ))}
-                    </div>
-                </div>
+                    </Box>
+                </Box>
             )}
 
             {searchResponse.value != null && searchResponse.value.length > 0 && (
-                <div className={styles.section}>
-                    <h2 className={styles.sectionTitle}>Stores near {searchedZip}</h2>
-                    <div className={styles.grid}>
-                        {searchResponse.value.map((match) => (
-                            <Link
-                                key={match.chain_id}
-                                to={`/${match.chain_id}/${searchedZip}/deals`}
-                                className={styles.storeCard}
-                            >
-                                <span className={styles.locationName}>
-                                    {match.chain_name}
-                                </span>
-                                <button
-                                    className={`${styles.favoriteButton} ${isMatchFavorited(match) ? styles.favorited : ''}`}
-                                    onClick={(event) => handleToggleFavorite(event, match.chain_id, searchedZip)}
-                                    title={isMatchFavorited(match) ? 'Remove from favorites' : 'Add to favorites'}
-                                >
-                                    {isMatchFavorited(match) ? '★' : '☆'}
-                                </button>
-                            </Link>
-                        ))}
-                    </div>
-                </div>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <Typography variant="h6">Stores near {searchedZip}</Typography>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 2 }}>
+                        {searchResponse.value.map((match) =>
+                            renderStoreCard(
+                                match.chain_id,
+                                searchedZip,
+                                match.chain_name,
+                                undefined,
+                                isMatchFavorited(match),
+                                (event) => handleToggleFavorite(event, match.chain_id, searchedZip),
+                            ),
+                        )}
+                    </Box>
+                </Box>
             )}
 
             {searchResponse.value != null && searchResponse.value.length === 0 && (
-                <p className={styles.emptyMessage}>No supported stores found for this zip code.</p>
+                <Typography color="text.secondary" textAlign="center">
+                    No supported stores found for this zip code.
+                </Typography>
             )}
 
             {favorites.length > 0 && (
-                <div className={styles.section}>
-                    <h2 className={styles.sectionTitle}>Your Stores</h2>
-                    <div className={styles.grid}>
-                        {favorites.map((favorite) => (
-                            <Link
-                                key={`${favorite.chainId}-${favorite.zipCode}`}
-                                to={`/${favorite.chainId}/${favorite.zipCode}/deals`}
-                                className={styles.storeCard}
-                            >
-                                <span className={styles.locationName}>
-                                    {displayChainName(favorite.chainId)} — {favorite.zipCode}
-                                </span>
-                                <button
-                                    className={`${styles.favoriteButton} ${styles.favorited}`}
-                                    onClick={(event) => handleToggleFavorite(event, favorite.chainId, favorite.zipCode)}
-                                    title="Remove from favorites"
-                                >
-                                    ★
-                                </button>
-                            </Link>
-                        ))}
-                    </div>
-                </div>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <Typography variant="h6">Your Stores</Typography>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 2 }}>
+                        {favorites.map((favorite) =>
+                            renderStoreCard(
+                                favorite.chainId,
+                                favorite.zipCode,
+                                displayChainName(favorite.chainId),
+                                favorite.zipCode,
+                                true,
+                                (event) => handleToggleFavorite(event, favorite.chainId, favorite.zipCode),
+                            ),
+                        )}
+                    </Box>
+                </Box>
             )}
 
             {favorites.length === 0 && searchResponse.value == null && (
-                <div className={styles.emptyState}>
-                    <p>Search for stores by zip code to get started.</p>
-                    <p>Star your favorites for quick access.</p>
-                </div>
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <Typography color="text.secondary">
+                        Search for stores by zip code to get started.
+                    </Typography>
+                    <Typography color="text.secondary">
+                        Star your favorites for quick access.
+                    </Typography>
+                </Box>
             )}
-        </div>
+        </Box>
     );
 };
 

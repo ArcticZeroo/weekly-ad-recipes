@@ -26,12 +26,6 @@
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     line-height: 1.5;
     font-weight: 400;
-    color: var(--color-text);
-    background-color: var(--color-background);
-    font-synthesis: none;
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
 
     @media (max-width: $breakpoint-large) {
         --default-padding: 1.25rem;
@@ -50,64 +44,6 @@
 *::before,
 *::after {
     box-sizing: border-box;
-}
-
-body {
-    margin: 0;
-    min-height: 100vh;
-}
-
-#root {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-}
-
-a {
-    color: var(--color-theme);
-    text-decoration: none;
-
-    &:hover {
-        color: var(--color-theme-hover);
-    }
-}
-
-button {
-    border-radius: 8px;
-    border: 1px solid var(--color-border);
-    padding: 0.5em 1em;
-    font-size: 1em;
-    font-weight: 500;
-    font-family: inherit;
-    color: var(--color-text);
-    background-color: var(--color-background-card);
-    cursor: pointer;
-    transition: background-color 0.2s, border-color 0.2s;
-
-    &:hover {
-        border-color: var(--color-theme);
-        background-color: var(--color-background-raised);
-    }
-
-    &:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-}
-
-input, select {
-    border-radius: 8px;
-    border: 1px solid var(--color-border);
-    padding: 0.5em 0.75em;
-    font-size: 1em;
-    font-family: inherit;
-    color: var(--color-text);
-    background-color: var(--color-background-input);
-
-    &:focus {
-        outline: 2px solid var(--color-theme);
-        outline-offset: -1px;
-    }
 }
 
 // Flex utility classes
@@ -140,29 +76,3 @@ input, select {
     flex-grow: 1;
 }
 
-// Card system
-.card {
-    background-color: var(--color-background-card);
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    padding: var(--default-padding);
-
-    &.error {
-        background-color: var(--color-error-background);
-        border-color: var(--color-error);
-        color: var(--color-error);
-        display: flex;
-        flex-direction: column;
-        gap: var(--constant-padding);
-        align-items: flex-start;
-
-        button {
-            color: var(--color-text);
-            border-color: var(--color-error);
-
-            &:hover {
-                background-color: var(--color-error-background);
-            }
-        }
-    }
-}

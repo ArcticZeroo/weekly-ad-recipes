@@ -1,4 +1,5 @@
 import React from 'react';
+import { Alert, Button } from '@mui/material';
 
 interface IErrorCardProps {
     message: string;
@@ -7,11 +8,17 @@ interface IErrorCardProps {
 
 export const ErrorCard: React.FC<IErrorCardProps> = ({ message, onRetry }) => {
     return (
-        <div className="card error">
-            <span>{message}</span>
-            {onRetry && (
-                <button onClick={onRetry}>Retry</button>
-            )}
-        </div>
+        <Alert
+            severity="error"
+            action={
+                onRetry && (
+                    <Button color="inherit" size="small" onClick={onRetry}>
+                        Retry
+                    </Button>
+                )
+            }
+        >
+            {message}
+        </Alert>
     );
 };

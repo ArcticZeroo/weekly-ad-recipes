@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { PromiseStage, useImmediatePromiseState } from '@arcticzeroo/react-promise-hook';
+import { Box, Button, Card, CardContent, Skeleton, Tab, Tabs, Typography } from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import RestaurantMenuIcon from '@mui/icons-material/RestaurantMenu';
 import { fetchDeals, refreshDeals } from '../../api/client.ts';
 import type { Deal } from '../../models/generated/Deal.ts';
 import type { DealsResponse } from '../../models/generated/DealsResponse.ts';
 import { currentWeekRange, formatWeekId } from '../../util/week.ts';
 import { LoadingCard } from '../common/loading-card.tsx';
-import { Skeleton } from '../common/skeleton.tsx';
+import { Skeleton as SkeletonWrapper } from '../common/skeleton.tsx';
 import { ErrorCard } from '../common/error-card.tsx';
-import styles from './deals-page.module.scss';
 
 const capitalizeCategory = (category: string): string => {
     return category
@@ -69,14 +71,12 @@ const DealsPage: React.FC = () => {
 
     const categories = useMemo(() => Array.from(groupedDeals.keys()), [groupedDeals]);
 
-    // Set initial active category
     useEffect(() => {
         if (categories.length > 0 && activeCategory == null) {
             setActiveCategory(categories[0] ?? null);
         }
     }, [categories, activeCategory]);
 
-    // Intersection observer to track which category is in view
     useEffect(() => {
         const observer = new IntersectionObserver(
             (entries) => {
@@ -93,7 +93,7 @@ const DealsPage: React.FC = () => {
                 }
             },
             {
-                rootMargin: '-120px 0px -60% 0px',
+                rootMargin: '-128px 0px -60% 0px',
                 threshold: 0,
             },
         );
@@ -105,15 +105,14 @@ const DealsPage: React.FC = () => {
         return () => observer.disconnect();
     }, [categories]);
 
-    const handleTabClick = (category: string) => {
+    const handleTabChange = (_event: React.SyntheticEvent, category: string) => {
         setActiveCategory(category);
         const element = sectionRefs.current.get(category);
         if (element) {
             isScrollingFromClick.current = true;
             const tabBarHeight = tabBarRef.current?.offsetHeight ?? 0;
             const elementTop = element.getBoundingClientRect().top + window.scrollY;
-            // Account for sticky nav + sticky tab bar
-            window.scrollTo({ top: elementTop - tabBarHeight - 80, behavior: 'smooth' });
+            window.scrollTo({ top: elementTop - tabBarHeight - 64, behavior: 'smooth' });
             setTimeout(() => {
                 isScrollingFromClick.current = false;
             }, 800);
@@ -140,126 +139,170 @@ const DealsPage: React.FC = () => {
 
     if (dealsData == null) {
         return (
-            <div className={`${styles.page} flex-col`}>
-                <div className={styles.header}>
-                    <div className="flex-col">
-                        <h1>Deals</h1>
-                        <span className={styles.meta}>
-                            {currentWeekRange()}
-                        </span>
-                    </div>
-                    <div className={styles.headerActions}>
-                        <button disabled>Refresh</button>
-                        <button disabled className={styles.viewMealsButton}>View Meals</button>
-                    </div>
-                </div>
-                <div className={styles.tabBar}>
+            <Box sx={{ maxWidth: 1100, width: '100%', mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+                    <Box>
+                        <Typography variant="h4">Deals</Typography>
+                        <Typography variant="body2" color="text.secondary">{currentWeekRange()}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Button variant="outlined" disabled startIcon={<RefreshIcon />}>Refresh</Button>
+                        <Button variant="contained" disabled startIcon={<RestaurantMenuIcon />}>View Meals</Button>
+                    </Box>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 2, borderBottom: '1px solid', borderColor: 'divider', pb: 0.5 }}>
                     {Array.from({ length: 6 }).map((_, index) => (
-                        <Skeleton key={index} height="2rem" width={`${4 + Math.random() * 3}rem`} borderRadius="0" />
+                        <SkeletonWrapper key={index} height="2rem" width={`${4 + Math.random() * 3}rem`} borderRadius="0" />
                     ))}
-                </div>
-                <div className={styles.categorySection}>
-                    <Skeleton height="1.1rem" width="8rem" />
-                    <div className={styles.dealsGrid}>
+                </Box>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <Skeleton variant="text" width={120} height={24} />
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 2 }}>
                         {Array.from({ length: 8 }).map((_, index) => (
-                            <div key={index} className={styles.dealCard}>
-                                <Skeleton height="120px" width="120px" borderRadius="8px" />
-                                <Skeleton height="1rem" width="85%" />
-                                <Skeleton height="0.8rem" width="50%" />
-                                <Skeleton height="0.9rem" width="40%" />
-                            </div>
+                            <Card key={index}>
+                                <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    <Skeleton variant="rectangular" height={120} width={120} sx={{ alignSelf: 'center', borderRadius: 2 }} />
+                                    <Skeleton variant="text" width="85%" />
+                                    <Skeleton variant="text" width="50%" />
+                                    <Skeleton variant="text" width="40%" />
+                                </CardContent>
+                            </Card>
                         ))}
-                    </div>
-                </div>
+                    </Box>
+                </Box>
                 <LoadingCard
                     message="Loading deals..."
                     subMessage={loadingElapsed ? 'Scanning weekly ad — this may take 15-30 seconds' : undefined}
                 />
-            </div>
+            </Box>
         );
     }
 
     const { deals, week_id: weekId } = dealsData;
 
     return (
-        <div className={`${styles.page} flex-col`}>
-            <div className={styles.header}>
-                <div className="flex-col">
-                    <h1>Deals</h1>
-                    <span className={styles.meta}>
+        <Box sx={{ maxWidth: 1100, width: '100%', mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+                <Box>
+                    <Typography variant="h4">Deals</Typography>
+                    <Typography variant="body2" color="text.secondary">
                         {deals.length} deals · {formatWeekId(weekId)}
-                    </span>
-                </div>
+                    </Typography>
+                </Box>
                 {isRefreshing && (
-                    <span className={styles.meta}>Refreshing deals...</span>
+                    <Typography variant="body2" color="text.secondary">Refreshing deals...</Typography>
                 )}
-                <div className={styles.headerActions}>
-                    <button onClick={handleRefresh} disabled={isRefreshing}>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button
+                        variant="outlined"
+                        onClick={handleRefresh}
+                        disabled={isRefreshing}
+                        startIcon={<RefreshIcon />}
+                    >
                         {isRefreshing ? 'Refreshing...' : 'Refresh'}
-                    </button>
-                    <Link to={`/${chain}/${zip}/meals`}>
-                        <button className={styles.viewMealsButton}>View Meals</button>
-                    </Link>
-                </div>
-            </div>
+                    </Button>
+                    <Button
+                        variant="contained"
+                        component={Link}
+                        to={`/${chain}/${zip}/meals`}
+                        startIcon={<RestaurantMenuIcon />}
+                    >
+                        View Meals
+                    </Button>
+                </Box>
+            </Box>
 
             {refreshError && <ErrorCard message={refreshError} />}
 
             {deals.length === 0 ? (
-                <p className={styles.meta}>No deals found for this location this week.</p>
+                <Typography color="text.secondary">No deals found for this location this week.</Typography>
             ) : (
                 <>
-                    <div ref={tabBarRef} className={styles.tabBar}>
-                        {categories.map((category) => (
-                            <button
-                                key={category}
-                                className={`${styles.tab} ${activeCategory === category ? styles.tabActive : ''}`}
-                                onClick={() => handleTabClick(category)}
-                            >
-                                {capitalizeCategory(category)}
-                            </button>
-                        ))}
-                    </div>
+                    <Box
+                        ref={tabBarRef}
+                        sx={{
+                            position: 'sticky',
+                            top: { xs: 56, sm: 64 },
+                            zIndex: 10,
+                            bgcolor: 'background.default',
+                            borderBottom: '1px solid',
+                            borderColor: 'divider',
+                        }}
+                    >
+                        <Tabs
+                            value={activeCategory ?? false}
+                            onChange={handleTabChange}
+                            variant="scrollable"
+                            scrollButtons="auto"
+                        >
+                            {categories.map((category) => (
+                                <Tab
+                                    key={category}
+                                    label={capitalizeCategory(category)}
+                                    value={category}
+                                />
+                            ))}
+                        </Tabs>
+                    </Box>
 
                     {Array.from(groupedDeals.entries()).map(([category, categoryDeals]) => (
-                        <div
+                        <Box
                             key={category}
-                            className={styles.categorySection}
                             data-category={category}
-                            ref={(element) => {
+                            ref={(element: HTMLDivElement | null) => {
                                 if (element) {
                                     sectionRefs.current.set(category, element);
                                 } else {
                                     sectionRefs.current.delete(category);
                                 }
                             }}
+                            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
                         >
-                            <h2 className={styles.categoryTitle}>
+                            <Typography
+                                variant="h6"
+                                sx={{ pb: 1, borderBottom: '1px solid', borderColor: 'divider' }}
+                            >
                                 {capitalizeCategory(category)} ({categoryDeals.length})
-                            </h2>
-                            <div className={styles.dealsGrid}>
+                            </Typography>
+                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 2 }}>
                                 {categoryDeals.map((deal) => (
-                                    <div key={deal.id} className={styles.dealCard}>
-                                        {deal.image_url && (
-                                            <img
-                                                src={deal.image_url}
-                                                alt={deal.item_name}
-                                                className={styles.dealImage}
-                                            />
-                                        )}
-                                        <span className={styles.dealName}>{deal.item_name}</span>
-                                        {deal.brand && (
-                                            <span className={styles.dealBrand}>{deal.brand}</span>
-                                        )}
-                                        <span className={styles.dealDescription}>{deal.deal_description}</span>
-                                    </div>
+                                    <Card key={deal.id}>
+                                        <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                                            {deal.image_url && (
+                                                <Box
+                                                    component="img"
+                                                    src={deal.image_url}
+                                                    alt={deal.item_name}
+                                                    sx={{
+                                                        width: 120,
+                                                        height: 120,
+                                                        objectFit: 'contain',
+                                                        borderRadius: 2,
+                                                        alignSelf: 'center',
+                                                        bgcolor: '#1e1e36',
+                                                    }}
+                                                />
+                                            )}
+                                            <Typography variant="subtitle2" fontWeight={600}>
+                                                {deal.item_name}
+                                            </Typography>
+                                            {deal.brand && (
+                                                <Typography variant="caption" color="text.secondary">
+                                                    {deal.brand}
+                                                </Typography>
+                                            )}
+                                            <Typography variant="body2">
+                                                {deal.deal_description}
+                                            </Typography>
+                                        </CardContent>
+                                    </Card>
                                 ))}
-                            </div>
-                        </div>
+                            </Box>
+                        </Box>
                     ))}
                 </>
             )}
-        </div>
+        </Box>
     );
 };
 
