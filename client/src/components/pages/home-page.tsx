@@ -18,13 +18,12 @@ import StarBorderIcon from '@mui/icons-material/StarBorder';
 import SearchIcon from '@mui/icons-material/Search';
 import { searchLocations, type IFlippStoreMatch } from '../../api/client.ts';
 import { useFavorites } from '../../context/favorites-context.tsx';
-import { displayChainName } from '../../util/chains.ts';
 import { ErrorCard } from '../common/error-card.tsx';
 
 const HomePage: React.FC = () => {
     const [zipCode, setZipCode] = useState('');
     const [searchedZip, setSearchedZip] = useState('');
-    const { favorites, addFavorite, removeFavorite, isFavorite } = useFavorites();
+    const { addFavorite, removeFavorite, isFavorite } = useFavorites();
     const navigate = useNavigate();
 
     const searchCallback = useCallback(() => searchLocations(zipCode), [zipCode]);
@@ -166,25 +165,7 @@ const HomePage: React.FC = () => {
                 </Typography>
             )}
 
-            {favorites.length > 0 && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <Typography variant="h6">Your Stores</Typography>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 2 }}>
-                        {favorites.map((favorite) =>
-                            renderStoreCard(
-                                favorite.chainId,
-                                favorite.zipCode,
-                                displayChainName(favorite.chainId),
-                                favorite.zipCode,
-                                true,
-                                (event) => handleToggleFavorite(event, favorite.chainId, favorite.zipCode),
-                            ),
-                        )}
-                    </Box>
-                </Box>
-            )}
-
-            {favorites.length === 0 && searchResponse.value == null && (
+            {searchResponse.value == null && searchResponse.stage !== PromiseStage.running && (
                 <Box sx={{ textAlign: 'center', py: 4 }}>
                     <Typography color="text.secondary">
                         Search for stores by zip code to get started.

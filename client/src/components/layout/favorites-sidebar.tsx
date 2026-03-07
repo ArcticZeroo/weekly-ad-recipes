@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
     Box,
     Divider,
@@ -20,10 +20,21 @@ interface IFavoritesSidebarProps {
     onNavigate?: () => void;
 }
 
+const parseLocationFromPath = (pathname: string): { chain: string; zip: string } | null => {
+    const parts = pathname.split('/').filter(Boolean);
+    if (parts.length >= 3) {
+        return { chain: parts[0]!, zip: parts[1]! };
+    }
+    return null;
+};
+
 export const FavoritesSidebar: React.FC<IFavoritesSidebarProps> = ({ onNavigate }) => {
     const { favorites, removeFavorite } = useFavorites();
-    const { chain: activeChain, zip: activeZip } = useParams<{ chain?: string; zip?: string }>();
+    const { pathname } = useLocation();
     const navigate = useNavigate();
+
+    const activeLocation = parseLocationFromPath(pathname);
+    const isHome = pathname === '/';
 
     const handleLocationClick = (chainId: string, zipCode: string) => {
         navigate(`/${chainId}/${zipCode}/deals`);
@@ -49,16 +60,17 @@ export const FavoritesSidebar: React.FC<IFavoritesSidebarProps> = ({ onNavigate 
             <Divider />
             <List sx={{ flex: 1, overflow: 'auto', px: 1, py: 0.5 }}>
                 <ListItemButton
+                    selected={isHome}
                     onClick={() => {
                         navigate('/');
                         onNavigate?.();
                     }}
                     sx={{ mb: 0.5 }}
                 >
-                    <HomeIcon sx={{ mr: 1.5, fontSize: '1.1rem', color: 'text.secondary' }} />
+                    <HomeIcon sx={{ mr: 1.5, fontSize: '1.1rem', color: isHome ? 'primary.main' : 'text.secondary' }} />
                     <ListItemText
                         primary="Home"
-                        primaryTypographyProps={{ fontSize: '0.875rem' }}
+                        primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: isHome ? 600 : 400 }}
                     />
                 </ListItemButton>
 
@@ -66,7 +78,8 @@ export const FavoritesSidebar: React.FC<IFavoritesSidebarProps> = ({ onNavigate 
 
                 {favorites.map((favorite) => {
                     const isActive =
-                        favorite.chainId === activeChain && favorite.zipCode === activeZip;
+                        favorite.chainId === activeLocation?.chain &&
+                        favorite.zipCode === activeLocation?.zip;
                     return (
                         <ListItemButton
                             key={`${favorite.chainId}-${favorite.zipCode}`}
