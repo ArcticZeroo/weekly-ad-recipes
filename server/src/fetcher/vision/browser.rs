@@ -1,56 +1,59 @@
 use std::time::Duration;
 
-use headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption;
-use headless_chrome::{Browser, LaunchOptions};
+use chromiumoxide::browser::{Browser, BrowserConfig};
+use chromiumoxide::cdp::browser_protocol::page::CaptureScreenshotFormat;
+use futures::StreamExt;
 
 use crate::error::AppError;
 
-fn launch_browser() -> Result<Browser, AppError> {
-    let mut builder = LaunchOptions::default_builder();
-    builder
-        .window_size(Some((1400, 900)))
-        .sandbox(false)
-        .idle_browser_timeout(Duration::from_secs(60));
+async fn launch_browser() -> Result<(Browser, tokio::task::JoinHandle<()>), AppError> {
+    let mut builder = BrowserConfig::builder()
+        .no_sandbox()
+        .window_size(1400, 900)
+        .arg("--disable-gpu")
+        .arg("--disable-dev-shm-usage");
 
     if let Ok(chrome_bin) = std::env::var("CHROME_BIN") {
-        builder.path(Some(chrome_bin.into()));
+        builder = builder.chrome_executable(chrome_bin);
     }
 
-    let options = builder
+    let config = builder
         .build()
         .map_err(|error| AppError::Internal(format!("Failed to configure browser: {error}")))?;
 
-    Browser::new(options)
-        .map_err(|error| AppError::Internal(format!("Failed to launch browser: {error}")))
+    let (browser, mut handler) = Browser::launch(config)
+        .await
+        .map_err(|error| AppError::Internal(format!("Failed to launch browser: {error}")))?;
+
+    let handler_task = tokio::spawn(async move {
+        while let Some(event) = handler.next().await {
+            let _ = event;
+        }
+    });
+
+    Ok((browser, handler_task))
 }
 
 /// Get the rendered DOM HTML of a URL using headless Chrome.
 pub async fn dump_dom(url: &str) -> Result<String, AppError> {
-    let url = url.to_string();
-    tokio::task::spawn_blocking(move || dump_dom_sync(&url))
+    let (mut browser, handler_task) = launch_browser().await?;
+
+    let page = browser
+        .new_page(url)
         .await
-        .map_err(|error| AppError::Internal(format!("Browser task panicked: {error}")))?
-}
+        .map_err(|error| AppError::Internal(format!("Failed to open page: {error}")))?;
 
-fn dump_dom_sync(url: &str) -> Result<String, AppError> {
-    let browser = launch_browser()?;
-    let tab = browser
-        .new_tab()
-        .map_err(|error| AppError::Internal(format!("Failed to create tab: {error}")))?;
+    tokio::time::sleep(Duration::from_secs(8)).await;
 
-    tab.navigate_to(url)
-        .map_err(|error| AppError::Internal(format!("Failed to navigate: {error}")))?;
-
-    std::thread::sleep(Duration::from_secs(8));
-
-    let result = tab
-        .evaluate("document.documentElement.outerHTML", false)
-        .map_err(|error| AppError::Internal(format!("Failed to get DOM: {error}")))?;
-
-    let html = result
-        .value
-        .and_then(|value| value.as_str().map(String::from))
+    let html: String = page
+        .evaluate("document.documentElement.outerHTML")
+        .await
+        .map_err(|error| AppError::Internal(format!("Failed to get DOM: {error}")))?
+        .into_value()
         .unwrap_or_default();
+
+    let _ = browser.close().await;
+    handler_task.abort();
 
     tracing::info!("dump_dom got {} chars from {url}", html.len());
     Ok(html)
@@ -59,38 +62,44 @@ fn dump_dom_sync(url: &str) -> Result<String, AppError> {
 /// Take full-page screenshots of a URL using headless Chrome.
 /// Returns one or more PNG screenshots (scrolls through the page).
 pub async fn screenshot_page(url: &str) -> Result<Vec<Vec<u8>>, AppError> {
-    let url = url.to_string();
-    tokio::task::spawn_blocking(move || screenshot_page_sync(&url))
-        .await
-        .map_err(|error| AppError::Internal(format!("Browser task panicked: {error}")))?
+    let (mut browser, handler_task) = launch_browser().await?;
+
+    let result = screenshot_with_browser(&browser, url).await;
+
+    let _ = browser.close().await;
+    handler_task.abort();
+
+    result
 }
 
-fn screenshot_page_sync(url: &str) -> Result<Vec<Vec<u8>>, AppError> {
-    let browser = launch_browser()?;
-    let tab = browser
-        .new_tab()
-        .map_err(|error| AppError::Internal(format!("Failed to create tab: {error}")))?;
+async fn screenshot_with_browser(
+    browser: &Browser,
+    url: &str,
+) -> Result<Vec<Vec<u8>>, AppError> {
+    let page = browser
+        .new_page(url)
+        .await
+        .map_err(|error| AppError::Internal(format!("Failed to open page: {error}")))?;
 
-    tab.navigate_to(url)
-        .map_err(|error| AppError::Internal(format!("Failed to navigate: {error}")))?;
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
-    std::thread::sleep(Duration::from_secs(5));
+    let _ = page
+        .evaluate(
+            r#"
+            document.querySelectorAll('[class*="cookie"], [class*="banner"], [class*="popup"], [id*="cookie"]')
+                .forEach(el => el.remove());
+            window.scrollTo(0, 0);
+        "#,
+        )
+        .await;
 
-    // Try to dismiss any cookie/popup banners
-    let _ = tab.evaluate(
-        r#"document.querySelectorAll('[class*="cookie"], [class*="banner"], [class*="popup"], [id*="cookie"]').forEach(el => el.remove()); window.scrollTo(0, 0);"#,
-        false,
-    );
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
-    std::thread::sleep(Duration::from_millis(500));
-
-    let height_result = tab
-        .evaluate("document.body.scrollHeight", false)
-        .map_err(|error| AppError::Internal(format!("Failed to get page height: {error}")))?;
-
-    let height: f64 = height_result
-        .value
-        .and_then(|value| value.as_f64())
+    let height: f64 = page
+        .evaluate("document.body.scrollHeight")
+        .await
+        .map_err(|error| AppError::Internal(format!("Failed to get page height: {error}")))?
+        .into_value()
         .unwrap_or(900.0);
 
     let viewport_height = 900.0;
@@ -100,11 +109,18 @@ fn screenshot_page_sync(url: &str) -> Result<Vec<Vec<u8>>, AppError> {
 
     for i in 0..num_screenshots {
         let scroll_y = (i as f64) * viewport_height;
-        let _ = tab.evaluate(&format!("window.scrollTo(0, {scroll_y})"), false);
-        std::thread::sleep(Duration::from_millis(500));
+        let _ = page
+            .evaluate(format!("window.scrollTo(0, {scroll_y})"))
+            .await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
 
-        let screenshot = tab
-            .capture_screenshot(CaptureScreenshotFormatOption::Png, None, None, true)
+        let screenshot = page
+            .screenshot(
+                chromiumoxide::page::ScreenshotParams::builder()
+                    .format(CaptureScreenshotFormat::Png)
+                    .build(),
+            )
+            .await
             .map_err(|error| AppError::Internal(format!("Screenshot failed: {error}")))?;
 
         screenshots.push(screenshot);
