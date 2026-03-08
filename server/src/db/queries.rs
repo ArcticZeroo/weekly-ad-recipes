@@ -1,3 +1,6 @@
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
 use sqlx::SqlitePool;
 
 use crate::error::AppError;
@@ -145,16 +148,33 @@ pub async fn save_deals(
     Ok(())
 }
 
+// ---- Deals Hashing ----
+
+pub fn compute_deals_hash(deals: &[Deal]) -> String {
+    let mut sorted: Vec<(&str, &str)> = deals
+        .iter()
+        .map(|deal| (deal.item_name.as_str(), deal.deal_description.as_str()))
+        .collect();
+    sorted.sort();
+
+    let mut hasher = DefaultHasher::new();
+    for (name, description) in &sorted {
+        name.hash(&mut hasher);
+        description.hash(&mut hasher);
+    }
+    format!("{:016x}", hasher.finish())
+}
+
 // ---- Meal Ideas ----
 
 pub async fn get_cached_meals(
     pool: &SqlitePool,
     location_id: i64,
     week_id: &str,
-) -> Result<Option<Vec<MealIdea>>, AppError> {
+) -> Result<Option<(Vec<MealIdea>, String)>, AppError> {
     let rows = sqlx::query!(
         r#"SELECT id as "id!", location_id as "location_id!", week_id, name, description,
-           on_sale_ingredients, additional_ingredients, estimated_savings, fetched_at
+           on_sale_ingredients, additional_ingredients, estimated_savings, deals_hash, fetched_at
            FROM meal_ideas WHERE location_id = ? AND week_id = ?"#,
         location_id,
         week_id
@@ -165,6 +185,8 @@ pub async fn get_cached_meals(
     if rows.is_empty() {
         return Ok(None);
     }
+
+    let deals_hash = rows[0].deals_hash.clone();
 
     let meals = rows
         .into_iter()
@@ -188,7 +210,22 @@ pub async fn get_cached_meals(
         })
         .collect();
 
-    Ok(Some(meals))
+    Ok(Some((meals, deals_hash)))
+}
+
+pub async fn invalidate_meals_cache(
+    pool: &SqlitePool,
+    location_id: i64,
+    week_id: &str,
+) -> Result<(), AppError> {
+    sqlx::query!(
+        "DELETE FROM meal_ideas WHERE location_id = ? AND week_id = ?",
+        location_id,
+        week_id
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 pub async fn save_meals(
@@ -196,6 +233,7 @@ pub async fn save_meals(
     location_id: i64,
     week_id: &str,
     meals: &[(String, String, Vec<String>, Vec<String>, String)],
+    deals_hash: &str,
 ) -> Result<(), AppError> {
     sqlx::query!(
         "DELETE FROM meal_ideas WHERE location_id = ? AND week_id = ?",
@@ -211,8 +249,8 @@ pub async fn save_meals(
 
         sqlx::query!(
             r#"INSERT INTO meal_ideas (location_id, week_id, name, description,
-               on_sale_ingredients, additional_ingredients, estimated_savings)
-               VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+               on_sale_ingredients, additional_ingredients, estimated_savings, deals_hash)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
             location_id,
             week_id,
             name,
@@ -220,6 +258,7 @@ pub async fn save_meals(
             on_sale_json,
             additional_json,
             savings,
+            deals_hash,
         )
         .execute(pool)
         .await?;

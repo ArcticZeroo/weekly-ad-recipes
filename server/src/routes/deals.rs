@@ -32,6 +32,7 @@ pub async fn refresh_deals(
     // Concurrent refreshes race to delete (idempotent), then one becomes
     // the leader and the rest wait and read the freshly cached result.
     queries::invalidate_deals_cache(&state.pool, location.id, &week_id).await?;
+    state.invalidate_deals_hash(location.id, &week_id);
 
     let (deals, _) = ensure_deals(&state, &location, &week_id).await?;
     Ok(Json(DealsResponse { chain_id: chain, zip_code: zip, week_id, deals, cached: false }))
@@ -50,6 +51,7 @@ async fn ensure_deals(
 
     loop {
         if let Some(deals) = queries::get_cached_deals(&state.pool, location.id, week_id).await? {
+            state.resolve_deals_hash(location.id, week_id, &deals);
             return Ok((deals, true));
         }
 
@@ -57,11 +59,11 @@ async fn ensure_deals(
             AcquireResult::Wait(notify) => {
                 tracing::debug!("Deals fetch already in-flight for {key}, waiting");
                 notify.notified().await;
-                // Re-check cache on next iteration
             }
             AcquireResult::Lead(guard) => {
                 let deals = fetch_deals_from_source(state, location, week_id).await?;
-                drop(guard); // Unblocks any waiters
+                state.resolve_deals_hash(location.id, week_id, &deals);
+                drop(guard);
                 return Ok((deals, false));
             }
         }

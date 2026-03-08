@@ -13,6 +13,8 @@ use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
 
 use crate::ai::client::AnthropicClient;
+use crate::db::queries;
+use crate::models::deal::Deal;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -20,6 +22,30 @@ pub struct AppState {
     pub ai: std::sync::Arc<AnthropicClient>,
     pub deals_tracker: inflight::InFlightTracker,
     pub meals_tracker: inflight::InFlightTracker,
+    deals_hash_cache: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>,
+}
+
+impl AppState {
+    fn deals_hash_cache_key(location_id: i64, week_id: &str) -> String {
+        format!("{location_id}:{week_id}")
+    }
+
+    /// Returns the cached deals hash, or computes it from the provided deals and caches it.
+    pub fn resolve_deals_hash(&self, location_id: i64, week_id: &str, deals: &[Deal]) -> String {
+        let key = Self::deals_hash_cache_key(location_id, week_id);
+        let mut cache = self.deals_hash_cache.lock().unwrap();
+        if let Some(hash) = cache.get(&key) {
+            return hash.clone();
+        }
+        let hash = queries::compute_deals_hash(deals);
+        cache.insert(key, hash.clone());
+        hash
+    }
+
+    pub fn invalidate_deals_hash(&self, location_id: i64, week_id: &str) {
+        let key = Self::deals_hash_cache_key(location_id, week_id);
+        self.deals_hash_cache.lock().unwrap().remove(&key);
+    }
 }
 
 #[tokio::main]
@@ -45,6 +71,9 @@ async fn main() {
         ai,
         deals_tracker: inflight::InFlightTracker::new(),
         meals_tracker: inflight::InFlightTracker::new(),
+        deals_hash_cache: std::sync::Arc::new(std::sync::Mutex::new(
+            std::collections::HashMap::new(),
+        )),
     };
 
     let app = Router::new()

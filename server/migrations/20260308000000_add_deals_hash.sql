@@ -1,0 +1,1 @@
+ALTER TABLE meal_ideas ADD COLUMN deals_hash TEXT NOT NULL DEFAULT '';
