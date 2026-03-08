@@ -1,0 +1,12 @@
+{
+  "apps": [
+    {
+      "name": "weekly-ad-recipes",
+      "script": "./server/target/release/weekly-ad-recipes-server",
+      "cwd": ".",
+      "env": {
+        "RUST_LOG": "weekly_ad_recipes_server=info"
+      }
+    }
+  ]
+}
