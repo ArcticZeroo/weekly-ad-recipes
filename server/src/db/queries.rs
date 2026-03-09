@@ -7,7 +7,7 @@ use sqlx::SqlitePool;
 use crate::error::AppError;
 use crate::models::deal::Deal;
 use crate::models::location::{CreateLocationRequest, StoreLocation};
-use crate::models::meal::MealIdea;
+use crate::models::meal::{MealIdea, SaleIngredient};
 
 // ---- Store Locations ----
 
@@ -192,7 +192,7 @@ pub async fn get_cached_meals(
     let meals = rows
         .into_iter()
         .map(|row| {
-            let on_sale: Vec<String> =
+            let on_sale: Vec<SaleIngredient> =
                 serde_json::from_str(&row.on_sale_ingredients).unwrap_or_default();
             let additional: Vec<String> =
                 serde_json::from_str(&row.additional_ingredients).unwrap_or_default();
@@ -233,7 +233,7 @@ pub async fn save_meals(
     pool: &SqlitePool,
     location_id: i64,
     week_id: &str,
-    meals: &[(String, String, Vec<String>, Vec<String>, String)],
+    meals: &[(String, String, Vec<SaleIngredient>, Vec<String>, String)],
     deals_hash: &str,
 ) -> Result<(), AppError> {
     sqlx::query!(

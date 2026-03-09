@@ -26,6 +26,7 @@ pub async fn get_meals(
             zip_code: zip,
             week_id,
             meals: vec![],
+            deals: vec![],
             cached: false,
         }));
     }
@@ -42,6 +43,7 @@ pub async fn get_meals(
                     zip_code: zip,
                     week_id,
                     meals,
+                    deals,
                     cached: true,
                 }));
             }
@@ -89,6 +91,7 @@ pub async fn get_meals(
                     zip_code: zip,
                     week_id,
                     meals,
+                    deals,
                     cached: false,
                 }));
             }

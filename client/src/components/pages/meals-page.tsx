@@ -1,8 +1,9 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { PromiseStage, useImmediatePromiseState } from '@arcticzeroo/react-promise-hook';
-import { Box, Button, Card, CardContent, Chip, Skeleton, Typography } from '@mui/material';
+import { Box, Button, Card, CardContent, Chip, Skeleton, Tooltip, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import type { Deal } from '../../models/generated/Deal.ts';
 import { fetchMeals } from '../../api/client.ts';
 import { currentWeekRange, formatWeekId } from '../../util/week.ts';
 import { LoadingCard } from '../common/loading-card.tsx';
@@ -70,7 +71,15 @@ const MealsPage: React.FC = () => {
         );
     }
 
-    const { meals, week_id: weekId, cached } = response.value;
+    const { meals, week_id: weekId, deals: responseDealsList, cached } = response.value;
+
+    const dealMap = useMemo(() => {
+        const map = new Map<number, Deal>();
+        for (const deal of responseDealsList) {
+            map.set(deal.id, deal);
+        }
+        return map;
+    }, [responseDealsList]);
 
     if (meals.length === 0) {
         return (
@@ -126,15 +135,35 @@ const MealsPage: React.FC = () => {
                                         On Sale
                                     </Typography>
                                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5 }}>
-                                        {meal.on_sale_ingredients.map((ingredient) => (
-                                            <Chip
-                                                key={ingredient}
-                                                label={ingredient}
-                                                size="small"
-                                                color="success"
-                                                variant="outlined"
-                                            />
-                                        ))}
+                                        {meal.on_sale_ingredients.map((saleIngredient) => {
+                                            const deal = dealMap.get(saleIngredient.deal_id);
+                                            const chip = (
+                                                <Chip
+                                                    key={`${saleIngredient.deal_id}-${saleIngredient.ingredient}`}
+                                                    label={saleIngredient.ingredient}
+                                                    size="small"
+                                                    color="success"
+                                                    variant="outlined"
+                                                />
+                                            );
+
+                                            if (!deal) return chip;
+
+                                            return (
+                                                <Tooltip
+                                                    key={`tooltip-${saleIngredient.deal_id}-${saleIngredient.ingredient}`}
+                                                    title={
+                                                        <Box>
+                                                            <Typography variant="subtitle2">{deal.item_name}</Typography>
+                                                            {deal.brand && <Typography variant="caption" display="block">{deal.brand}</Typography>}
+                                                            <Typography variant="body2">{deal.deal_description}</Typography>
+                                                        </Box>
+                                                    }
+                                                >
+                                                    {chip}
+                                                </Tooltip>
+                                            );
+                                        })}
                                     </Box>
                                 </Box>
                             )}
