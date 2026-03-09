@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM wfm_store_lookups",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "5dee62b7b762382ff4ba9eb6df877a0edb5754b69f52712874c59630a52ad29c"
+}

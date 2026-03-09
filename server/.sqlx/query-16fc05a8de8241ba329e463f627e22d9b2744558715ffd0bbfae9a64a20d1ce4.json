@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR REPLACE INTO wfm_store_lookups (zip_code, store_id) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "16fc05a8de8241ba329e463f627e22d9b2744558715ffd0bbfae9a64a20d1ce4"
+}

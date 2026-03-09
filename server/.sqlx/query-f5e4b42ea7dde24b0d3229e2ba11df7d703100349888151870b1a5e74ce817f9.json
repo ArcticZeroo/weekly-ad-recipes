@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT store_id as \"store_id!\", name, latitude, longitude FROM wfm_stores",
+  "describe": {
+    "columns": [
+      {
+        "name": "store_id!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "latitude",
+        "ordinal": 2,
+        "type_info": "Float"
+      },
+      {
+        "name": "longitude",
+        "ordinal": 3,
+        "type_info": "Float"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f5e4b42ea7dde24b0d3229e2ba11df7d703100349888151870b1a5e74ce817f9"
+}

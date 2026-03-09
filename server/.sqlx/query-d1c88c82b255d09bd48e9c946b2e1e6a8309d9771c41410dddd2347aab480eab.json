@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR REPLACE INTO wfm_stores\n           (store_id, slug, name, city, state, zip_code, latitude, longitude)\n           VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "d1c88c82b255d09bd48e9c946b2e1e6a8309d9771c41410dddd2347aab480eab"
+}

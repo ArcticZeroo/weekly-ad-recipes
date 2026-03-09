@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT store_id FROM wfm_store_lookups WHERE zip_code = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "store_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "19f966730458c4d29d6b0a684b3ed941bd262e3e298065d6b46a6badaf02af9d"
+}

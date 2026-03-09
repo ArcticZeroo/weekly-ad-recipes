@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT slug FROM wfm_stores",
+  "describe": {
+    "columns": [
+      {
+        "name": "slug",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e99ff1368820030c0567c2e03f8836522dbef8d0933cd6edbf43ba854ff6ac68"
+}
