@@ -6,12 +6,18 @@ use crate::error::AppError;
 const FLIPP_FLYERS_URL: &str = "https://backflipp.wishabi.com/flipp/flyers";
 const FLIPP_ITEMS_URL: &str = "https://flyers-ng.flippback.com/api/flipp/flyers";
 
-/// Known chain names as they appear in the Flipp API
-const SUPPORTED_FLIPP_CHAINS: &[(&str, &str)] = &[
-    ("qfc", "QFC"),
-    ("safeway", "Safeway"),
-    ("fred-meyer", "Fred Meyer"),
-];
+/// Derive a URL-safe chain ID slug from a merchant name.
+/// e.g., "Fred Meyer" → "fred-meyer", "H Mart" → "h-mart"
+pub fn merchant_name_to_chain_id(name: &str) -> String {
+    name.trim()
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join("-")
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-')
+        .collect()
+}
 
 #[derive(Debug, Deserialize)]
 struct FlippFlyerResponse {
@@ -66,8 +72,9 @@ fn generate_session_id() -> String {
     digits
 }
 
-/// Search Flipp for weekly ad flyers near a zip code, returning matches for supported chains.
-/// Deduplicates by chain, keeping only the best grocery flyer per chain.
+/// Search Flipp for grocery flyers near a zip code.
+/// Auto-discovers all merchants with grocery flyers — no whitelist needed.
+/// Deduplicates by merchant, keeping the best grocery flyer per merchant.
 pub async fn search_flyers_by_zip(
     client: &reqwest::Client,
     zip: &str,
@@ -84,42 +91,37 @@ pub async fn search_flyers_by_zip(
         std::collections::HashMap::new();
 
     for flyer in &response.flyers {
+        let categories = flyer.categories_csv.as_deref().unwrap_or("");
+        if !categories.contains("Groceries") {
+            continue;
+        }
+
         let merchant_name = match &flyer.merchant {
             Some(name) => name.trim(),
             None => continue,
         };
 
-        for &(chain_id, chain_display) in SUPPORTED_FLIPP_CHAINS {
-            if merchant_name.eq_ignore_ascii_case(chain_display)
-                || merchant_name
-                    .to_lowercase()
-                    .contains(&chain_display.to_lowercase())
-            {
-                let flyer_name = flyer.name.as_deref().unwrap_or("").to_lowercase();
-                let priority = flyer_priority(&flyer_name);
+        let chain_id = merchant_name_to_chain_id(merchant_name);
+        let flyer_name = flyer.name.as_deref().unwrap_or("").to_lowercase();
+        let priority = flyer_priority(&flyer_name);
 
-                let candidate = FlippStoreMatch {
-                    chain_id: chain_id.to_string(),
-                    chain_name: chain_display.to_string(),
-                    flyer_id: Some(flyer.id),
-                    merchant_id: flyer.merchant_id,
-                    merchant_name: merchant_name.to_string(),
-                    store_name: flyer.name.clone(),
-                    valid_from: flyer.valid_from.clone(),
-                    valid_to: flyer.valid_to.clone(),
-                };
+        let candidate = FlippStoreMatch {
+            chain_id: chain_id.clone(),
+            chain_name: merchant_name.to_string(),
+            flyer_id: Some(flyer.id),
+            merchant_id: flyer.merchant_id,
+            merchant_name: merchant_name.to_string(),
+            store_name: None,
+            valid_from: flyer.valid_from.clone(),
+            valid_to: flyer.valid_to.clone(),
+        };
 
-                let key = chain_id.to_string();
-                if let Some((_existing, existing_priority)) = best_by_chain.get(&key) {
-                    if priority > *existing_priority {
-                        best_by_chain.insert(key, (candidate, priority));
-                    }
-                } else {
-                    best_by_chain.insert(key, (candidate, priority));
-                }
-
-                break;
+        if let Some((_existing, existing_priority)) = best_by_chain.get(&chain_id) {
+            if priority > *existing_priority {
+                best_by_chain.insert(chain_id, (candidate, priority));
             }
+        } else {
+            best_by_chain.insert(chain_id, (candidate, priority));
         }
     }
 

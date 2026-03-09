@@ -1,4 +1,5 @@
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
 use sqlx::SqlitePool;
@@ -265,6 +266,109 @@ pub async fn save_meals(
     }
 
     Ok(())
+}
+
+// ---- WFM Stores ----
+
+pub async fn get_known_wfm_slugs(pool: &SqlitePool) -> Result<HashSet<String>, AppError> {
+    let rows = sqlx::query_scalar!("SELECT slug FROM wfm_stores")
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().collect())
+}
+
+pub async fn insert_wfm_store(
+    pool: &SqlitePool,
+    store_id: &str,
+    slug: &str,
+    name: &str,
+    city: Option<&str>,
+    state: Option<&str>,
+    zip_code: Option<&str>,
+    latitude: f64,
+    longitude: f64,
+) -> Result<(), AppError> {
+    sqlx::query!(
+        r#"INSERT OR REPLACE INTO wfm_stores
+           (store_id, slug, name, city, state, zip_code, latitude, longitude)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+        store_id,
+        slug,
+        name,
+        city,
+        state,
+        zip_code,
+        latitude,
+        longitude,
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn get_all_wfm_stores(
+    pool: &SqlitePool,
+) -> Result<Vec<(String, String, f64, f64)>, AppError> {
+    let rows = sqlx::query!(
+        r#"SELECT store_id as "store_id!", name, latitude, longitude FROM wfm_stores"#
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.store_id, row.name, row.latitude, row.longitude))
+        .collect())
+}
+
+pub async fn get_wfm_store_lookup(
+    pool: &SqlitePool,
+    zip_code: &str,
+) -> Result<Option<String>, AppError> {
+    let store_id = sqlx::query_scalar!(
+        "SELECT store_id FROM wfm_store_lookups WHERE zip_code = ?",
+        zip_code
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(store_id)
+}
+
+pub async fn save_wfm_store_lookup(
+    pool: &SqlitePool,
+    zip_code: &str,
+    store_id: &str,
+) -> Result<(), AppError> {
+    sqlx::query!(
+        "INSERT OR REPLACE INTO wfm_store_lookups (zip_code, store_id) VALUES (?, ?)",
+        zip_code,
+        store_id,
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn clear_wfm_store_lookups(pool: &SqlitePool) -> Result<(), AppError> {
+    sqlx::query!("DELETE FROM wfm_store_lookups")
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn get_wfm_store_by_id(
+    pool: &SqlitePool,
+    store_id: &str,
+) -> Result<Option<(String, String, f64, f64)>, AppError> {
+    let row = sqlx::query!(
+        r#"SELECT store_id as "store_id!", name, latitude, longitude
+           FROM wfm_stores WHERE store_id = ?"#,
+        store_id
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|row| (row.store_id, row.name, row.latitude, row.longitude)))
 }
 
 /// Get the current ISO week ID (e.g., "2026-W10")

@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use axum::extract::{Path, State};
 use axum::Json;
 
@@ -121,58 +123,87 @@ async fn fetch_and_cache_flipp_deals(
 
     // Extract deal descriptions from images for items with no price info
     let vision_items = flipp::items_needing_vision(&items);
+
+    let mut all_categories: HashMap<String, String> = HashMap::new();
+
     if !vision_items.is_empty() {
         tracing::info!("{} items need vision extraction", vision_items.len());
-        match crate::ai::extract_deals::extract_deals_from_images(
-            &state.ai,
-            &client,
-            &vision_items,
-        )
-        .await
-        {
-            Ok(extracted) => {
-                for deal in &mut deal_tuples {
-                    if deal.2 == "On Sale" {
-                        if let Some(description) = extracted.get(&deal.0) {
-                            deal.2 = description.clone();
-                        }
-                    }
-                }
-                // Remove items the AI identified as not actual deals
-                deal_tuples.retain(|deal| deal.2 != "NOT_A_DEAL");
-                tracing::info!("Vision extracted deals for {} items", extracted.len());
+
+        let vision_item_names: HashSet<&str> = vision_items
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+
+        let ready_items: Vec<(String, Option<String>)> = deal_tuples
+            .iter()
+            .filter(|(name, _, _, _, _)| !vision_item_names.contains(name.as_str()))
+            .map(|(name, brand, _, _, _)| (name.clone(), brand.clone()))
+            .collect();
+
+        // Pre-categorize enough items that the remainder + vision items
+        // fit in a single final batch
+        let keep_for_final = crate::ai::categorize::BATCH_SIZE
+            .saturating_sub(vision_items.len());
+        let pre_categorize_count = ready_items.len().saturating_sub(keep_for_final);
+
+        if pre_categorize_count > 0 {
+            tracing::info!(
+                "Pre-categorizing {} items concurrently with vision extraction",
+                pre_categorize_count
+            );
+
+            let (vision_result, pre_cat_result) = tokio::join!(
+                crate::ai::extract_deals::extract_deals_from_images(
+                    &state.ai, &client, &vision_items
+                ),
+                crate::ai::categorize::categorize_items(
+                    &state.ai, &ready_items[..pre_categorize_count]
+                ),
+            );
+
+            apply_vision_results(&mut deal_tuples, vision_result);
+
+            match pre_cat_result {
+                Ok(categories) => all_categories.extend(categories),
+                Err(error) => tracing::warn!("Pre-categorization failed: {error}"),
             }
-            Err(err) => {
-                tracing::warn!("Vision deal extraction failed: {err}");
-            }
+        } else {
+            let vision_result = crate::ai::extract_deals::extract_deals_from_images(
+                &state.ai, &client, &vision_items,
+            )
+            .await;
+            apply_vision_results(&mut deal_tuples, vision_result);
         }
     }
 
-    // AI categorization — also filters out non-food items
-    let items_for_categorization: Vec<(String, Option<String>)> = deal_tuples
+    // Categorize remaining uncategorized items
+    let remaining_items: Vec<(String, Option<String>)> = deal_tuples
         .iter()
+        .filter(|(name, _, _, _, _)| !all_categories.contains_key(name))
         .map(|(name, brand, _, _, _)| (name.clone(), brand.clone()))
         .collect();
 
-    match crate::ai::categorize::categorize_items(&state.ai, &items_for_categorization).await {
-        Ok(categories) => {
-            for deal in &mut deal_tuples {
-                if let Some(category) = categories.get(&deal.0) {
-                    deal.3 = category.clone();
-                }
+    if !remaining_items.is_empty() {
+        match crate::ai::categorize::categorize_items(&state.ai, &remaining_items).await {
+            Ok(categories) => all_categories.extend(categories),
+            Err(error) => {
+                tracing::warn!("AI categorization failed, using 'uncategorized': {error}");
             }
-            let before = deal_tuples.len();
-            deal_tuples.retain(|deal| deal.3 != "not_food");
-            tracing::info!(
-                "AI categorized {} items, filtered {} non-food",
-                categories.len(),
-                before - deal_tuples.len()
-            );
-        }
-        Err(err) => {
-            tracing::warn!("AI categorization failed, using 'uncategorized': {err}");
         }
     }
+
+    for deal in &mut deal_tuples {
+        if let Some(category) = all_categories.get(&deal.0) {
+            deal.3 = category.clone();
+        }
+    }
+    let before = deal_tuples.len();
+    deal_tuples.retain(|deal| deal.3 != "not_food");
+    tracing::info!(
+        "AI categorized {} items, filtered {} non-food",
+        all_categories.len(),
+        before - deal_tuples.len()
+    );
 
     queries::save_deals(&state.pool, location.id, week_id, &deal_tuples).await?;
 
@@ -306,4 +337,26 @@ async fn fetch_generic_vision_deals(
     );
 
     Ok(deal_tuples)
+}
+
+fn apply_vision_results(
+    deal_tuples: &mut Vec<(String, Option<String>, String, String, Option<String>)>,
+    result: Result<HashMap<String, String>, AppError>,
+) {
+    match result {
+        Ok(extracted) => {
+            for deal in deal_tuples.iter_mut() {
+                if deal.2 == "On Sale" {
+                    if let Some(description) = extracted.get(&deal.0) {
+                        deal.2 = description.clone();
+                    }
+                }
+            }
+            deal_tuples.retain(|deal| deal.2 != "NOT_A_DEAL");
+            tracing::info!("Vision extracted deals for {} items", extracted.len());
+        }
+        Err(error) => {
+            tracing::warn!("Vision deal extraction failed: {error}");
+        }
+    }
 }

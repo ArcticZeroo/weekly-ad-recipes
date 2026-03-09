@@ -1,11 +1,11 @@
-use axum::extract::Query;
+use axum::extract::{Query, State};
 use axum::Json;
 use serde::Deserialize;
 
 use crate::db::queries;
 use crate::error::AppError;
 use crate::fetcher::flipp;
-use crate::models::chain::supported_chains;
+use crate::fetcher::wfm_stores;
 use crate::models::location::{CreateLocationRequest, StoreLocation};
 use crate::AppState;
 
@@ -16,19 +16,30 @@ pub struct SearchQuery {
 
 /// Search for stores by zip code. Returns lightweight results without DB writes.
 pub async fn search_locations(
+    State(state): State<AppState>,
     Query(query): Query<SearchQuery>,
 ) -> Result<Json<Vec<flipp::FlippStoreMatch>>, AppError> {
     let client = reqwest::Client::new();
     let mut matches = flipp::search_flyers_by_zip(&client, &query.zip).await?;
 
-    // Whole Foods uses structured scraping instead of Flipp
+    let wfm_store_name = match wfm_stores::find_nearest_wfm_store(
+        &state.pool,
+        &state.zip_geo,
+        &query.zip,
+    )
+    .await
+    {
+        Ok(Some((_, name))) => Some(name),
+        _ => None,
+    };
+
     matches.push(flipp::FlippStoreMatch {
         chain_id: "whole-foods".to_string(),
         chain_name: "Whole Foods".to_string(),
         flyer_id: None,
         merchant_id: None,
         merchant_name: "Whole Foods Market".to_string(),
-        store_name: Some("Redmond".to_string()),
+        store_name: wfm_store_name,
         valid_from: None,
         valid_to: None,
     });
@@ -37,6 +48,7 @@ pub async fn search_locations(
 }
 
 /// Resolve a chain+zip to a StoreLocation, auto-creating if one doesn't exist yet.
+/// Accepts any chain ID — Flipp merchants are auto-discovered, Whole Foods uses its own scraper.
 pub async fn resolve_or_create_location(
     state: &AppState,
     chain: &str,
@@ -46,39 +58,65 @@ pub async fn resolve_or_create_location(
         return Ok(existing);
     }
 
-    let chain_info = supported_chains()
-        .into_iter()
-        .find(|c| c.id == chain)
-        .ok_or_else(|| AppError::NotFound(format!("Unsupported chain: {chain}")))?;
+    if chain == "whole-foods" {
+        let (weekly_ad_url, location_name) =
+            resolve_whole_foods_location(state, zip, "Whole Foods").await?;
 
-    let (merchant_id, merchant_name) = if chain_info.uses_flipp {
-        let client = reqwest::Client::new();
-        let results = flipp::search_flyers_by_zip(&client, zip).await?;
-        let found = results.iter().find(|m| m.chain_id == chain);
-        (
-            found.and_then(|m| m.merchant_id),
-            found.map(|m| m.merchant_name.clone()),
-        )
-    } else {
-        (None, None)
-    };
+        let create_req = CreateLocationRequest {
+            chain_id: chain.to_string(),
+            name: location_name,
+            address: None,
+            zip_code: zip.to_string(),
+            flipp_merchant_id: None,
+            flipp_merchant_name: None,
+            weekly_ad_url,
+        };
+        return queries::create_location(&state.pool, &create_req).await;
+    }
 
-    let weekly_ad_url = if chain == "whole-foods" {
-        Some("https://www.wholefoodsmarket.com/sales-flyer?store-id=10260".to_string())
-    } else {
-        None
-    };
+    // Flipp-based chain: look up the merchant info from a search
+    let client = reqwest::Client::new();
+    let results = flipp::search_flyers_by_zip(&client, zip).await?;
+    let found = results.iter().find(|m| m.chain_id == chain);
+
+    let display_name = found
+        .map(|m| m.chain_name.clone())
+        .unwrap_or_else(|| chain.to_string());
 
     let create_req = CreateLocationRequest {
         chain_id: chain.to_string(),
-        name: format!("{} - {}", chain_info.name, zip),
+        name: format!("{} - {}", display_name, zip),
         address: None,
         zip_code: zip.to_string(),
-        flipp_merchant_id: merchant_id,
-        flipp_merchant_name: merchant_name,
-        weekly_ad_url,
+        flipp_merchant_id: found.and_then(|m| m.merchant_id),
+        flipp_merchant_name: found.map(|m| m.merchant_name.clone()),
+        weekly_ad_url: None,
     };
 
-    let location = queries::create_location(&state.pool, &create_req).await?;
-    Ok(location)
+    queries::create_location(&state.pool, &create_req).await
+}
+
+async fn resolve_whole_foods_location(
+    state: &AppState,
+    zip: &str,
+    chain_display_name: &str,
+) -> Result<(Option<String>, String), AppError> {
+    let (store_id, store_name) = wfm_stores::find_nearest_wfm_store(
+        &state.pool,
+        &state.zip_geo,
+        zip,
+    )
+    .await?
+    .ok_or_else(|| {
+        AppError::Internal(
+            "Whole Foods store catalog is not yet available. Please try again shortly.".into(),
+        )
+    })?;
+
+    let url = format!(
+        "https://www.wholefoodsmarket.com/sales-flyer?store-id={}",
+        store_id
+    );
+    let name = format!("{} - {}", chain_display_name, store_name);
+    Ok((Some(url), name))
 }

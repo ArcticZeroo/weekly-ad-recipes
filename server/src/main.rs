@@ -14,6 +14,7 @@ use tower_http::services::{ServeDir, ServeFile};
 
 use crate::ai::client::AnthropicClient;
 use crate::db::queries;
+use crate::fetcher::zip_geo::ZipGeo;
 use crate::models::deal::Deal;
 
 #[derive(Clone)]
@@ -22,6 +23,7 @@ pub struct AppState {
     pub ai: std::sync::Arc<AnthropicClient>,
     pub deals_tracker: inflight::InFlightTracker,
     pub meals_tracker: inflight::InFlightTracker,
+    pub zip_geo: std::sync::Arc<ZipGeo>,
     deals_hash_cache: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>,
 }
 
@@ -76,16 +78,64 @@ async fn main() {
         .expect("Failed to create database pool");
 
     let ai = std::sync::Arc::new(AnthropicClient::new(config.anthropic_api_key));
+    let zip_geo = std::sync::Arc::new(ZipGeo::load().await);
+    tracing::info!("Loaded {} zip code centroids", zip_geo.len());
 
     let state = AppState {
         pool,
         ai,
+        zip_geo,
         deals_tracker: inflight::InFlightTracker::new(),
         meals_tracker: inflight::InFlightTracker::new(),
         deals_hash_cache: std::sync::Arc::new(std::sync::Mutex::new(
             std::collections::HashMap::new(),
         )),
     };
+
+    // Scrape WFM store catalog if empty, then re-check daily at 3 AM
+    {
+        let pool = state.pool.clone();
+        tokio::spawn(async move {
+            let known = crate::db::queries::get_known_wfm_slugs(&pool)
+                .await
+                .map(|slugs| slugs.len())
+                .unwrap_or(0);
+
+            if known == 0 {
+                tracing::info!("No WFM stores in database, scraping catalog now");
+                if let Err(error) = fetcher::wfm_stores::ensure_wfm_catalog(&pool).await {
+                    tracing::warn!("WFM catalog scrape failed: {error}");
+                }
+            } else {
+                tracing::info!("{known} WFM stores already cached, skipping boot scrape");
+            }
+
+            loop {
+                let now = chrono::Local::now();
+                let next_3am = (now + chrono::Duration::days(1))
+                    .date_naive()
+                    .and_hms_opt(3, 0, 0)
+                    .unwrap();
+                let next_3am = next_3am
+                    .and_local_timezone(now.timezone())
+                    .single()
+                    .unwrap_or_else(|| now + chrono::Duration::days(1));
+                let sleep_duration = (next_3am - now)
+                    .to_std()
+                    .unwrap_or(std::time::Duration::from_secs(86400));
+
+                tracing::info!(
+                    "Next WFM catalog check in {:.1} hours",
+                    sleep_duration.as_secs_f64() / 3600.0
+                );
+                tokio::time::sleep(sleep_duration).await;
+
+                if let Err(error) = fetcher::wfm_stores::ensure_wfm_catalog(&pool).await {
+                    tracing::warn!("WFM catalog scrape failed: {error}");
+                }
+            }
+        });
+    }
 
     let app = Router::new()
         .route("/api/health", get(health))

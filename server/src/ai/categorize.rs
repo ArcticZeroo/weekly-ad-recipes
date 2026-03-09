@@ -5,7 +5,7 @@ use crate::error::AppError;
 
 const MODEL: &str = "claude-haiku-4-5-20251001";
 const MAX_TOKENS: u32 = 4096;
-const BATCH_SIZE: usize = 40;
+pub const BATCH_SIZE: usize = 40;
 
 const CATEGORIES: &[&str] = &[
     "produce",

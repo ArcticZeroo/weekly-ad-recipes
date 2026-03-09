@@ -39,6 +39,7 @@ thiserror = "1"
 base64 = "0.21"
 rand = "0.8"
 futures = "0.3"
+regex = "1"
 
 # Headless browser (Vision fallback — requires Chromium installed, set CHROME_BIN if not on PATH)
 chromiumoxide = { version = "0.5", features = ["tokio-runtime"], default-features = false }

@@ -27,7 +27,7 @@ const HomePage: React.FC = () => {
     const navigate = useNavigate();
 
     const searchCallback = useCallback(() => searchLocations(zipCode), [zipCode]);
-    const searchResponse = useDelayedPromiseState(searchCallback);
+    const searchResponse = useDelayedPromiseState(searchCallback, false);
 
     const handleSearch = (event: React.FormEvent) => {
         event.preventDefault();
@@ -150,7 +150,7 @@ const HomePage: React.FC = () => {
                                 match.chain_id,
                                 searchedZip,
                                 match.chain_name,
-                                undefined,
+                                match.store_name ?? undefined,
                                 isMatchFavorited(match),
                                 (event) => handleToggleFavorite(event, match.chain_id, searchedZip),
                             ),
