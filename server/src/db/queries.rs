@@ -115,6 +115,54 @@ pub async fn invalidate_deals_cache(
     Ok(())
 }
 
+pub async fn invalidate_deals_for_chain(
+    pool: &SqlitePool,
+    location_id: i64,
+) -> Result<(), AppError> {
+    sqlx::query!(
+        "DELETE FROM deals WHERE location_id = ?",
+        location_id
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn get_latest_deals_for_location(
+    pool: &SqlitePool,
+    location_id: i64,
+) -> Result<Option<(Vec<Deal>, String)>, AppError> {
+    let first = sqlx::query!(
+        "SELECT DISTINCT week_id FROM deals WHERE location_id = ? ORDER BY week_id DESC LIMIT 1",
+        location_id
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    let week_id = match first {
+        Some(row) => row.week_id,
+        None => return Ok(None),
+    };
+
+    let deals = sqlx::query_as!(
+        Deal,
+        r#"SELECT id as "id!", location_id as "location_id!", week_id, item_name, brand,
+           deal_description, category, image_url, fetched_at
+           FROM deals WHERE location_id = ? AND week_id = ?
+           ORDER BY category, item_name"#,
+        location_id,
+        week_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    if deals.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some((deals, week_id)))
+    }
+}
+
 pub async fn save_deals(
     pool: &SqlitePool,
     location_id: i64,

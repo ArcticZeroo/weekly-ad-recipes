@@ -6,6 +6,7 @@ use axum::Json;
 use crate::db::queries;
 use crate::error::AppError;
 use crate::fetcher::flipp;
+use crate::fetcher::hmart;
 use crate::inflight::AcquireResult;
 use crate::models::deal::{Deal, DealsResponse};
 use crate::models::location::StoreLocation;
@@ -17,8 +18,13 @@ pub async fn get_deals(
     Path((chain, zip)): Path<(String, String)>,
 ) -> Result<Json<DealsResponse>, AppError> {
     let location = resolve_or_create_location(&state, &chain, &zip).await?;
-    let week_id = queries::current_week_id();
 
+    if chain == "h-mart" {
+        let (deals, week_id, cached) = ensure_hmart_deals(&state, &location).await?;
+        return Ok(Json(DealsResponse { chain_id: chain, zip_code: zip, week_id, deals, cached }));
+    }
+
+    let week_id = queries::current_week_id();
     let (deals, cached) = ensure_deals(&state, &location, &week_id).await?;
     Ok(Json(DealsResponse { chain_id: chain, zip_code: zip, week_id, deals, cached }))
 }
@@ -28,11 +34,16 @@ pub async fn refresh_deals(
     Path((chain, zip)): Path<(String, String)>,
 ) -> Result<Json<DealsResponse>, AppError> {
     let location = resolve_or_create_location(&state, &chain, &zip).await?;
+
+    if chain == "h-mart" {
+        // Delete all H Mart deals for this location, then re-fetch
+        queries::invalidate_deals_for_chain(&state.pool, location.id).await?;
+        let (deals, week_id, _) = ensure_hmart_deals(&state, &location).await?;
+        return Ok(Json(DealsResponse { chain_id: chain, zip_code: zip, week_id, deals, cached: false }));
+    }
+
     let week_id = queries::current_week_id();
 
-    // Invalidate cache so the loop below is forced to re-fetch.
-    // Concurrent refreshes race to delete (idempotent), then one becomes
-    // the leader and the rest wait and read the freshly cached result.
     queries::invalidate_deals_cache(&state.pool, location.id, &week_id).await?;
     state.invalidate_deals_hash(location.id, &week_id);
 
@@ -359,4 +370,31 @@ fn apply_vision_results(
             tracing::warn!("Vision deal extraction failed: {error}");
         }
     }
+}
+
+/// H Mart deals use date-based week IDsextracted from the flyer image.
+/// Returns `(deals, week_id, was_from_cache)`.
+async fn ensure_hmart_deals(
+    state: &AppState,
+    location: &StoreLocation,
+) -> Result<(Vec<Deal>, String, bool), AppError> {
+    // Check if this location already has any deals cached
+    if let Some((deals, week_id)) = queries::get_latest_deals_for_location(&state.pool, location.id).await? {
+        return Ok((deals, week_id, true));
+    }
+
+    // Fetch via Vision — returns deals + the week_id derived from flyer dates
+    let (deal_tuples, week_id) = hmart::fetch_hmart_deals(state, location).await?;
+
+    if deal_tuples.is_empty() {
+        return Ok((vec![], week_id, false));
+    }
+
+    queries::save_deals(&state.pool, location.id, &week_id, &deal_tuples).await?;
+
+    let deals = queries::get_cached_deals(&state.pool, location.id, &week_id)
+        .await?
+        .unwrap_or_default();
+
+    Ok((deals, week_id, false))
 }

@@ -5,6 +5,7 @@ use serde::Deserialize;
 use crate::db::queries;
 use crate::error::AppError;
 use crate::fetcher::flipp;
+use crate::fetcher::hmart;
 use crate::fetcher::wfm_stores;
 use crate::models::location::{CreateLocationRequest, StoreLocation};
 use crate::AppState;
@@ -44,6 +45,20 @@ pub async fn search_locations(
         valid_to: None,
     });
 
+    let hmart_store_name =
+        hmart::find_nearest_hmart_wa_store(&state.zip_geo, &query.zip).map(|(name, _)| name);
+
+    matches.push(flipp::FlippStoreMatch {
+        chain_id: "h-mart".to_string(),
+        chain_name: "H Mart".to_string(),
+        flyer_id: None,
+        merchant_id: None,
+        merchant_name: "H Mart".to_string(),
+        store_name: hmart_store_name,
+        valid_from: None,
+        valid_to: None,
+    });
+
     Ok(Json(matches))
 }
 
@@ -56,6 +71,22 @@ pub async fn resolve_or_create_location(
 ) -> Result<StoreLocation, AppError> {
     if let Some(existing) = queries::find_location_by_chain_zip(&state.pool, chain, zip).await? {
         return Ok(existing);
+    }
+
+    if chain == "h-mart" {
+        let (store_name, weekly_ad_url) = hmart::find_nearest_hmart_wa_store(&state.zip_geo, zip)
+            .ok_or_else(|| AppError::NotFound("No H Mart stores near this zip code".into()))?;
+
+        let create_request = CreateLocationRequest {
+            chain_id: "h-mart".to_string(),
+            name: store_name,
+            address: None,
+            zip_code: zip.to_string(),
+            flipp_merchant_id: None,
+            flipp_merchant_name: None,
+            weekly_ad_url: Some(weekly_ad_url),
+        };
+        return queries::create_location(&state.pool, &create_request).await;
     }
 
     if chain == "whole-foods" {

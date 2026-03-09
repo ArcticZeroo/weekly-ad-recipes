@@ -16,5 +16,10 @@ pub fn supported_chains() -> Vec<StoreChain> {
             name: "Whole Foods".into(),
             uses_flipp: false,
         },
+        StoreChain {
+            id: "h-mart".into(),
+            name: "H Mart".into(),
+            uses_flipp: false,
+        },
     ]
 }
