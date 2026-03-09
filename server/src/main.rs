@@ -90,8 +90,10 @@ async fn main() {
         )
         .route("/api/meals/:chain/:zip", get(routes::meals::get_meals))
         .fallback_service(
-            ServeDir::new("../client/dist")
-                .not_found_service(ServeFile::new("../client/dist/index.html")),
+            ServeDir::new(&config.static_dir)
+                .not_found_service(ServeFile::new(
+                    format!("{}/index.html", config.static_dir),
+                )),
         )
         .layer(CorsLayer::permissive())
         .with_state(state);
