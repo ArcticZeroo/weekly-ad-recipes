@@ -4,7 +4,6 @@ pub struct Config {
     pub database_url: String,
     pub anthropic_api_key: String,
     pub port: u16,
-    pub static_dir: String,
 }
 
 impl Config {
@@ -18,8 +17,6 @@ impl Config {
                 .ok()
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(3001),
-            static_dir: env::var("STATIC_DIR")
-                .unwrap_or_else(|_| "../client/dist".into()),
         }
     }
 }
