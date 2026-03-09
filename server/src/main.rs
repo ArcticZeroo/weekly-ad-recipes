@@ -60,6 +60,17 @@ async fn main() {
         .init();
 
     let config = config::Config::from_env();
+
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let static_dir = cwd.join("../client/dist");
+    tracing::info!("Working directory: {}", cwd.display());
+    tracing::info!(
+        "Static files dir: {} (exists: {}, index.html exists: {})",
+        static_dir.display(),
+        static_dir.is_dir(),
+        static_dir.join("index.html").is_file(),
+    );
+
     let pool = db::create_pool(&config.database_url)
         .await
         .expect("Failed to create database pool");
