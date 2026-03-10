@@ -275,3 +275,30 @@ fn find_closest_store(
         .min_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
         .map(|(store_id, name, _)| (store_id.clone(), name.clone()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_sitemap_slugs_extracts_store_slugs() {
+        let xml = r#"<?xml version="1.0"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<url><loc>https://www.wholefoodsmarket.com/stores/interbay</loc><lastmod>2025-10-29</lastmod></url>
+<url><loc>https://www.wholefoodsmarket.com/stores/bellevue</loc><lastmod>2025-10-29</lastmod></url>
+</urlset>"#;
+
+        let slugs = parse_sitemap_slugs(xml);
+        assert_eq!(slugs, vec!["interbay", "bellevue"]);
+    }
+
+    #[test]
+    fn parse_sitemap_slugs_empty_xml_returns_empty() {
+        let xml = r#"<?xml version="1.0"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+</urlset>"#;
+
+        let slugs = parse_sitemap_slugs(xml);
+        assert!(slugs.is_empty());
+    }
+}

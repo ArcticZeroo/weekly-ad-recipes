@@ -51,6 +51,15 @@ impl ZipGeo {
     pub fn len(&self) -> usize {
         self.coordinates.len()
     }
+
+    #[cfg(test)]
+    pub fn from_entries(entries: Vec<(String, f64, f64)>) -> Self {
+        let coordinates = entries
+            .into_iter()
+            .map(|(code, latitude, longitude)| (code, (latitude, longitude)))
+            .collect();
+        Self { coordinates }
+    }
 }
 
 fn data_cache_path() -> PathBuf {
@@ -99,4 +108,33 @@ pub fn haversine_distance_km(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 
     let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
 
     EARTH_RADIUS_KM * c
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn haversine_same_point_returns_zero() {
+        let distance = haversine_distance_km(47.6062, -122.3321, 47.6062, -122.3321);
+        assert_eq!(distance, 0.0);
+    }
+
+    #[test]
+    fn haversine_seattle_to_portland() {
+        let distance = haversine_distance_km(47.6062, -122.3321, 45.5152, -122.6784);
+        assert!(
+            (distance - 233.0).abs() < 5.0,
+            "Seattle to Portland should be ~233 km, got {distance}"
+        );
+    }
+
+    #[test]
+    fn haversine_new_york_to_london() {
+        let distance = haversine_distance_km(40.7128, -74.0060, 51.5074, -0.1278);
+        assert!(
+            (distance - 5570.0).abs() < 50.0,
+            "New York to London should be ~5570 km, got {distance}"
+        );
+    }
 }

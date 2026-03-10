@@ -237,6 +237,65 @@ fn build_deal_description(item: &FlippItem) -> String {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn merchant_name_fred_meyer() {
+        assert_eq!(merchant_name_to_chain_id("Fred Meyer"), "fred-meyer");
+    }
+
+    #[test]
+    fn merchant_name_qfc() {
+        assert_eq!(merchant_name_to_chain_id("QFC"), "qfc");
+    }
+
+    #[test]
+    fn merchant_name_h_mart() {
+        assert_eq!(merchant_name_to_chain_id("H Mart"), "h-mart");
+    }
+
+    #[test]
+    fn merchant_name_trims_whitespace() {
+        assert_eq!(merchant_name_to_chain_id("  Safeway  "), "safeway");
+    }
+
+    #[test]
+    fn merchant_name_removes_apostrophe() {
+        assert_eq!(merchant_name_to_chain_id("Trader Joe's"), "trader-joes");
+    }
+
+    #[test]
+    fn merchant_name_aldi() {
+        assert_eq!(merchant_name_to_chain_id("ALDI"), "aldi");
+    }
+
+    #[test]
+    fn week_id_from_valid_from_standard() {
+        assert_eq!(
+            week_id_from_valid_from("2026-03-04T00:00:00-05:00"),
+            "flipp-20260304"
+        );
+    }
+
+    #[test]
+    fn week_id_from_valid_from_dst() {
+        assert_eq!(
+            week_id_from_valid_from("2026-03-11T00:00:00-04:00"),
+            "flipp-20260311"
+        );
+    }
+
+    #[test]
+    fn week_id_from_valid_from_year_end() {
+        assert_eq!(
+            week_id_from_valid_from("2025-12-25T00:00:00-05:00"),
+            "flipp-20251225"
+        );
+    }
+}
+
 /// Returns items that have "On Sale" as their description but have a cutout image
 /// that likely contains the actual deal text (e.g., "Buy 1 Get 1 Free").
 pub fn items_needing_vision(

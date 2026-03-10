@@ -430,3 +430,84 @@ pub fn current_week_id() -> String {
     let now = chrono::Utc::now();
     format!("{}-W{:02}", now.format("%G"), now.format("%V"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_deal(item_name: &str, deal_description: &str, valid_to: Option<&str>) -> Deal {
+        Deal {
+            id: 0,
+            location_id: 0,
+            week_id: String::new(),
+            item_name: item_name.to_string(),
+            brand: None,
+            deal_description: deal_description.to_string(),
+            category: String::new(),
+            image_url: None,
+            valid_from: None,
+            valid_to: valid_to.map(|s| s.to_string()),
+            fetched_at: String::new(),
+        }
+    }
+
+    #[test]
+    fn compute_deals_hash_is_sort_independent() {
+        let deals_a = vec![
+            make_deal("Bananas", "$0.59/lb", None),
+            make_deal("Apples", "$1.99/lb", None),
+        ];
+        let deals_b = vec![
+            make_deal("Apples", "$1.99/lb", None),
+            make_deal("Bananas", "$0.59/lb", None),
+        ];
+        assert_eq!(compute_deals_hash(&deals_a), compute_deals_hash(&deals_b));
+    }
+
+    #[test]
+    fn compute_deals_hash_differs_for_different_deals() {
+        let deals_a = vec![make_deal("Bananas", "$0.59/lb", None)];
+        let deals_b = vec![make_deal("Oranges", "$2.99/lb", None)];
+        assert_ne!(compute_deals_hash(&deals_a), compute_deals_hash(&deals_b));
+    }
+
+    #[test]
+    fn compute_deals_hash_empty_is_deterministic() {
+        let empty: Vec<Deal> = vec![];
+        let hash_a = compute_deals_hash(&empty);
+        let hash_b = compute_deals_hash(&empty);
+        assert_eq!(hash_a, hash_b);
+        assert_eq!(hash_a.len(), 16);
+    }
+
+    #[test]
+    fn are_deals_expired_past_date_returns_true() {
+        let deals = vec![make_deal("Milk", "$3.99", Some("2020-01-01T23:59:59-05:00"))];
+        assert!(are_deals_expired(&deals));
+    }
+
+    #[test]
+    fn are_deals_expired_future_date_returns_false() {
+        let deals = vec![make_deal("Milk", "$3.99", Some("2099-12-31T23:59:59-05:00"))];
+        assert!(!are_deals_expired(&deals));
+    }
+
+    #[test]
+    fn are_deals_expired_today_returns_false() {
+        let today = chrono::Utc::now().format("%Y-%m-%dT23:59:59-05:00").to_string();
+        let deals = vec![make_deal("Milk", "$3.99", Some(&today))];
+        assert!(!are_deals_expired(&deals));
+    }
+
+    #[test]
+    fn are_deals_expired_none_valid_to_returns_false() {
+        let deals = vec![make_deal("Milk", "$3.99", None)];
+        assert!(!are_deals_expired(&deals));
+    }
+
+    #[test]
+    fn are_deals_expired_empty_slice_returns_false() {
+        let deals: Vec<Deal> = vec![];
+        assert!(!are_deals_expired(&deals));
+    }
+}

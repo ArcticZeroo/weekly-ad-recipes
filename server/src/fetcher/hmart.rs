@@ -338,6 +338,44 @@ async fn fetch_sibling_deals(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_zip_geo() -> ZipGeo {
+        ZipGeo::from_entries(vec![
+            ("98052".into(), 47.6740, -122.1215),
+            ("98101".into(), 47.6114, -122.3378),
+            ("98004".into(), 47.6101, -122.2015),
+            ("90210".into(), 34.0901, -118.4065),
+        ])
+    }
+
+    #[test]
+    fn find_nearest_hmart_redmond_zip() {
+        let zip_geo = test_zip_geo();
+        let result = find_nearest_hmart_wa_store(&zip_geo, "98052");
+        assert!(result.is_some());
+        let (store_name, url) = result.unwrap();
+        assert_eq!(store_name, "H Mart - Redmond");
+        assert_eq!(url, HMART_WA_WEEKLY_AD_URL);
+    }
+
+    #[test]
+    fn find_nearest_hmart_far_away_zip_returns_none() {
+        let zip_geo = test_zip_geo();
+        let result = find_nearest_hmart_wa_store(&zip_geo, "90210");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn find_nearest_hmart_unknown_zip_returns_none() {
+        let zip_geo = test_zip_geo();
+        let result = find_nearest_hmart_wa_store(&zip_geo, "00000");
+        assert!(result.is_none());
+    }
+}
+
 fn sibling_deals_to_tuples(deals: &[Deal]) -> Vec<DealTuple> {
     deals
         .iter()
