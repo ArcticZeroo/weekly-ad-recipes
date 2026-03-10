@@ -2,4 +2,4 @@
 import type { Deal } from "./Deal";
 import type { MealIdea } from "./MealIdea";
 
-export interface MealsResponse { chain_id: string, zip_code: string, week_id: string, meals: Array<MealIdea>, deals: Array<Deal>, cached: boolean, }
+export interface MealsResponse { chain_id: string, zip_code: string, valid_from: string | null, valid_to: string | null, meals: Array<MealIdea>, deals: Array<Deal>, cached: boolean, }

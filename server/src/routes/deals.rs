@@ -19,8 +19,8 @@ pub async fn get_deals(
 ) -> Result<Json<DealsResponse>, AppError> {
     let location = resolve_or_create_location(&state, &chain, &zip).await?;
 
-    let (deals, week_id, cached) = ensure_current_deals(&state, &location).await?;
-    Ok(Json(DealsResponse { chain_id: chain, zip_code: zip, week_id, deals, cached }))
+    let (deals, _week_id, cached) = ensure_current_deals(&state, &location).await?;
+    Ok(Json(build_deals_response(chain, zip, deals, cached)))
 }
 
 pub async fn refresh_deals(
@@ -31,8 +31,19 @@ pub async fn refresh_deals(
 
     queries::invalidate_all_deals_for_location(&state.pool, location.id).await?;
 
-    let (deals, week_id, _) = ensure_current_deals(&state, &location).await?;
-    Ok(Json(DealsResponse { chain_id: chain, zip_code: zip, week_id, deals, cached: false }))
+    let (deals, _week_id, _) = ensure_current_deals(&state, &location).await?;
+    Ok(Json(build_deals_response(chain, zip, deals, false)))
+}
+
+fn build_deals_response(
+    chain_id: String,
+    zip_code: String,
+    deals: Vec<Deal>,
+    cached: bool,
+) -> DealsResponse {
+    let valid_from = deals.first().and_then(|deal| deal.valid_from.clone());
+    let valid_to = deals.first().and_then(|deal| deal.valid_to.clone());
+    DealsResponse { chain_id, zip_code, valid_from, valid_to, deals, cached }
 }
 
 /// Returns current deals for a location, fetching fresh if expired or missing.

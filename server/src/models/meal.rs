@@ -32,7 +32,8 @@ pub struct MealIdea {
 pub struct MealsResponse {
     pub chain_id: String,
     pub zip_code: String,
-    pub week_id: String,
+    pub valid_from: Option<String>,
+    pub valid_to: Option<String>,
     pub meals: Vec<MealIdea>,
     pub deals: Vec<Deal>,
     pub cached: bool,

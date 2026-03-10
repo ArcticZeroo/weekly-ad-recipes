@@ -20,13 +20,17 @@ pub async fn get_meals(
             return Ok(Json(MealsResponse {
                 chain_id: chain,
                 zip_code: zip,
-                week_id: String::new(),
+                valid_from: None,
+                valid_to: None,
                 meals: vec![],
                 deals: vec![],
                 cached: false,
             }));
         }
     };
+
+    let valid_from = deals.first().and_then(|deal| deal.valid_from.clone());
+    let valid_to = deals.first().and_then(|deal| deal.valid_to.clone());
 
     let key = format!("{}:{}", location.id, week_id);
 
@@ -40,7 +44,8 @@ pub async fn get_meals(
                 return Ok(Json(MealsResponse {
                     chain_id: chain,
                     zip_code: zip,
-                    week_id,
+                    valid_from: valid_from.clone(),
+                    valid_to: valid_to.clone(),
                     meals,
                     deals,
                     cached: true,
@@ -88,7 +93,8 @@ pub async fn get_meals(
                 return Ok(Json(MealsResponse {
                     chain_id: chain,
                     zip_code: zip,
-                    week_id,
+                    valid_from,
+                    valid_to,
                     meals,
                     deals,
                     cached: false,

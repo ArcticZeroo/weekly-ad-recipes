@@ -24,7 +24,8 @@ pub struct Deal {
 pub struct DealsResponse {
     pub chain_id: String,
     pub zip_code: String,
-    pub week_id: String,
+    pub valid_from: Option<String>,
+    pub valid_to: Option<String>,
     pub deals: Vec<Deal>,
     pub cached: bool,
 }

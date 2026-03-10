@@ -1,62 +1,39 @@
 /**
- * Convert an ISO week string like "2026-W10" into the Monday–Sunday date range,
- * then format it as a human-friendly string like "Mar 2 – Mar 8".
+ * Format a date range from valid_from/valid_to strings into a human-friendly string.
+ * Input formats: "2026-03-04T00:00:00-05:00" or "20260304" or "2026-03-04"
+ * Output: "Mar 4 – Mar 10"
  */
-export const formatWeekId = (weekId: string): string => {
-    const range = weekIdToDateRange(weekId);
-    if (range == null) {
-        return weekId;
-    }
-    const [start, end] = range;
-    const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-    const startStr = start.toLocaleDateString('en-US', options);
-    const endStr = end.toLocaleDateString('en-US', options);
-    return `${startStr} – ${endStr}`;
-};
-
-/**
- * Parse "YYYY-Www" into [Monday, Sunday] Date objects, or null if invalid.
- */
-const weekIdToDateRange = (weekId: string): [Date, Date] | null => {
-    const match = /^(\d{4})-W(\d{2})$/.exec(weekId);
-    if (match == null) {
+export const formatDateRange = (validFrom: string | null | undefined, validTo: string | null | undefined): string | null => {
+    if (validFrom == null || validTo == null) {
         return null;
     }
-    const year = Number(match[1]);
-    const week = Number(match[2]);
 
-    // ISO 8601: week 1 contains January 4th.
-    // Find Monday of week 1, then offset to the target week.
-    const jan4 = new Date(year, 0, 4);
-    const dayOfWeek = jan4.getDay() || 7; // convert Sunday=0 to 7
-    const monday = new Date(jan4);
-    monday.setDate(jan4.getDate() - (dayOfWeek - 1) + (week - 1) * 7);
+    const start = parseFlexibleDate(validFrom);
+    const end = parseFlexibleDate(validTo);
+    if (start == null || end == null) {
+        return null;
+    }
 
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-
-    return [monday, sunday];
+    const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+    const startString = start.toLocaleDateString('en-US', options);
+    const endString = end.toLocaleDateString('en-US', options);
+    return `${startString} – ${endString}`;
 };
 
-/**
- * Get the current ISO week ID (e.g., "2026-W10").
- */
-export const currentWeekId = (): string => {
-    const now = new Date();
-    const jan4 = new Date(now.getFullYear(), 0, 4);
-    const dayOfWeek = jan4.getDay() || 7;
-    const monday = new Date(jan4);
-    monday.setDate(jan4.getDate() - (dayOfWeek - 1));
+const parseFlexibleDate = (dateString: string): Date | null => {
+    // "2026-03-04T00:00:00-05:00" → parse with Date constructor
+    if (dateString.includes('T')) {
+        const date = new Date(dateString);
+        return isNaN(date.getTime()) ? null : date;
+    }
 
-    const diff = now.getTime() - monday.getTime();
-    const week = Math.floor(diff / (7 * 24 * 60 * 60 * 1000)) + 1;
+    // "20260304" → manual parse
+    const compactMatch = /^(\d{4})(\d{2})(\d{2})$/.exec(dateString);
+    if (compactMatch != null) {
+        return new Date(Number(compactMatch[1]), Number(compactMatch[2]) - 1, Number(compactMatch[3]));
+    }
 
-    return `${now.getFullYear()}-W${String(week).padStart(2, '0')}`;
-};
-
-/**
- * Get the current week formatted as a date range (e.g., "Mar 2 – Mar 8").
- */
-export const currentWeekRange = (): string => {
-    return formatWeekId(currentWeekId());
+    // "2026-03-04" → parse directly
+    const date = new Date(dateString + 'T00:00:00');
+    return isNaN(date.getTime()) ? null : date;
 };

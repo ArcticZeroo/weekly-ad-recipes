@@ -7,7 +7,7 @@ import RestaurantMenuIcon from '@mui/icons-material/RestaurantMenu';
 import { fetchDeals, refreshDeals } from '../../api/client.ts';
 import type { Deal } from '../../models/generated/Deal.ts';
 import type { DealsResponse } from '../../models/generated/DealsResponse.ts';
-import { currentWeekRange, formatWeekId } from '../../util/week.ts';
+import { formatDateRange } from '../../util/week.ts';
 import { LoadingCard } from '../common/loading-card.tsx';
 import { Skeleton as SkeletonWrapper } from '../common/skeleton.tsx';
 import { ErrorCard } from '../common/error-card.tsx';
@@ -143,7 +143,6 @@ const DealsPage: React.FC = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
                     <Box>
                         <Typography variant="h4">Deals</Typography>
-                        <Typography variant="body2" color="text.secondary">{currentWeekRange()}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', gap: 1 }}>
                         <Button variant="outlined" disabled startIcon={<RefreshIcon />}>Refresh</Button>
@@ -178,7 +177,8 @@ const DealsPage: React.FC = () => {
         );
     }
 
-    const { deals, week_id: weekId } = dealsData;
+    const { deals, valid_from: validFrom, valid_to: validTo } = dealsData;
+    const dateRange = formatDateRange(validFrom, validTo);
 
     return (
         <Box sx={{ maxWidth: 1100, width: '100%', mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -186,7 +186,7 @@ const DealsPage: React.FC = () => {
                 <Box>
                     <Typography variant="h4">Deals</Typography>
                     <Typography variant="body2" color="text.secondary">
-                        {deals.length} deals · {formatWeekId(weekId)}
+                        {deals.length} deals{dateRange != null ? ` · ${dateRange}` : ''}
                     </Typography>
                 </Box>
                 {isRefreshing && (

@@ -5,7 +5,7 @@ import { Box, Button, Card, CardContent, Chip, Skeleton, Tooltip, Typography } f
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import type { Deal } from '../../models/generated/Deal.ts';
 import { fetchMeals } from '../../api/client.ts';
-import { currentWeekRange, formatWeekId } from '../../util/week.ts';
+import { formatDateRange } from '../../util/week.ts';
 import { LoadingCard } from '../common/loading-card.tsx';
 import { ErrorCard } from '../common/error-card.tsx';
 
@@ -29,7 +29,6 @@ const MealsPage: React.FC = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
                     <Box>
                         <Typography variant="h4">Meal Ideas</Typography>
-                        <Typography variant="body2" color="text.secondary">{currentWeekRange()}</Typography>
                     </Box>
                     <Button
                         variant="outlined"
@@ -71,7 +70,7 @@ const MealsPage: React.FC = () => {
         );
     }
 
-    const { meals, week_id: weekId, deals: responseDealsList, cached } = response.value;
+    const { meals, valid_from: validFrom, valid_to: validTo, deals: responseDealsList, cached } = response.value;
 
     const dealMap = useMemo(() => {
         const map = new Map<number, Deal>();
@@ -102,7 +101,7 @@ const MealsPage: React.FC = () => {
                 <Box>
                     <Typography variant="h4">Meal Ideas</Typography>
                     <Typography variant="body2" color="text.secondary">
-                        {meals.length} meal ideas · {formatWeekId(weekId)}
+                        {meals.length} meal ideas{formatDateRange(validFrom, validTo) != null ? ` · ${formatDateRange(validFrom, validTo)}` : ''}
                         {cached && ' · cached'}
                     </Typography>
                 </Box>
