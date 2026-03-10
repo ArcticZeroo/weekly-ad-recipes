@@ -6,6 +6,7 @@ use axum::Json;
 use crate::db::queries;
 use crate::error::AppError;
 use crate::fetcher::flipp;
+use crate::fetcher::hmart;
 use crate::inflight::AcquireResult;
 use crate::models::deal::{Deal, DealsResponse};
 use crate::models::location::StoreLocation;
@@ -81,6 +82,8 @@ async fn fetch_deals_from_source(
 ) -> Result<(Vec<Deal>, String), AppError> {
     if location.flipp_merchant_id.is_some() {
         fetch_and_cache_flipp_deals(state, location).await
+    } else if location.chain_id == "h-mart" {
+        fetch_and_cache_hmart_deals(state, location).await
     } else {
         let week_id = queries::current_week_id();
         let deals = fetch_and_cache_vision_deals(state, location, &week_id).await?;
@@ -376,4 +379,23 @@ fn apply_vision_results(
             tracing::warn!("Vision deal extraction failed: {error}");
         }
     }
+}
+
+async fn fetch_and_cache_hmart_deals(
+    state: &AppState,
+    location: &StoreLocation,
+) -> Result<(Vec<Deal>, String), AppError> {
+    let (deal_tuples, week_id) = hmart::fetch_hmart_deals(state, location).await?;
+
+    if deal_tuples.is_empty() {
+        return Ok((vec![], week_id));
+    }
+
+    queries::save_deals(&state.pool, location.id, &week_id, &deal_tuples, None, None).await?;
+
+    let deals = queries::get_cached_deals(&state.pool, location.id, &week_id)
+        .await?
+        .unwrap_or_default();
+
+    Ok((deals, week_id))
 }
