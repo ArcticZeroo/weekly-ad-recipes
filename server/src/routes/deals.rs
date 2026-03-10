@@ -17,9 +17,8 @@ pub async fn get_deals(
     Path((chain, zip)): Path<(String, String)>,
 ) -> Result<Json<DealsResponse>, AppError> {
     let location = resolve_or_create_location(&state, &chain, &zip).await?;
-    let week_id = queries::current_week_id();
 
-    let (deals, cached) = ensure_deals(&state, &location, &week_id).await?;
+    let (deals, week_id, cached) = ensure_current_deals(&state, &location).await?;
     Ok(Json(DealsResponse { chain_id: chain, zip_code: zip, week_id, deals, cached }))
 }
 
@@ -28,33 +27,34 @@ pub async fn refresh_deals(
     Path((chain, zip)): Path<(String, String)>,
 ) -> Result<Json<DealsResponse>, AppError> {
     let location = resolve_or_create_location(&state, &chain, &zip).await?;
-    let week_id = queries::current_week_id();
 
-    // Invalidate cache so the loop below is forced to re-fetch.
-    // Concurrent refreshes race to delete (idempotent), then one becomes
-    // the leader and the rest wait and read the freshly cached result.
-    queries::invalidate_deals_cache(&state.pool, location.id, &week_id).await?;
-    state.invalidate_deals_hash(location.id, &week_id);
+    queries::invalidate_all_deals_for_location(&state.pool, location.id).await?;
 
-    let (deals, _) = ensure_deals(&state, &location, &week_id).await?;
+    let (deals, week_id, _) = ensure_current_deals(&state, &location).await?;
     Ok(Json(DealsResponse { chain_id: chain, zip_code: zip, week_id, deals, cached: false }))
 }
 
-/// Returns deals from cache or fetches them, deduplicating concurrent requests
-/// so only one fetch runs at a time for a given location+week.
-///
-/// Returns `(deals, was_from_cache)`.
-async fn ensure_deals(
+/// Returns current deals for a location, fetching fresh if expired or missing.
+/// Returns `(deals, week_id, was_from_cache)`.
+async fn ensure_current_deals(
     state: &AppState,
     location: &StoreLocation,
-    week_id: &str,
-) -> Result<(Vec<Deal>, bool), AppError> {
-    let key = format!("{}:{}", location.id, week_id);
+) -> Result<(Vec<Deal>, String, bool), AppError> {
+    let key = format!("deals:{}", location.id);
 
     loop {
-        if let Some(deals) = queries::get_cached_deals(&state.pool, location.id, week_id).await? {
-            state.resolve_deals_hash(location.id, week_id, &deals);
-            return Ok((deals, true));
+        if let Some((deals, week_id)) =
+            queries::get_current_deals(&state.pool, location.id).await?
+        {
+            if !queries::are_deals_expired(&deals) {
+                state.resolve_deals_hash(location.id, &week_id, &deals);
+                return Ok((deals, week_id, true));
+            }
+            tracing::info!(
+                "Deals expired for location {} (week: {week_id}), will refresh",
+                location.id
+            );
+            queries::invalidate_deals_cache(&state.pool, location.id, &week_id).await?;
         }
 
         match state.deals_tracker.try_acquire(&key) {
@@ -63,33 +63,35 @@ async fn ensure_deals(
                 notify.notified().await;
             }
             AcquireResult::Lead(guard) => {
-                let deals = fetch_deals_from_source(state, location, week_id).await?;
-                state.resolve_deals_hash(location.id, week_id, &deals);
+                let (deals, week_id) =
+                    fetch_deals_from_source(state, location).await?;
+                state.resolve_deals_hash(location.id, &week_id, &deals);
                 drop(guard);
-                return Ok((deals, false));
+                return Ok((deals, week_id, false));
             }
         }
     }
 }
 
 /// Dispatches to the appropriate fetch strategy (Flipp or Vision).
+/// Returns `(deals, week_id)`.
 async fn fetch_deals_from_source(
     state: &AppState,
     location: &StoreLocation,
-    week_id: &str,
-) -> Result<Vec<Deal>, AppError> {
+) -> Result<(Vec<Deal>, String), AppError> {
     if location.flipp_merchant_id.is_some() {
-        fetch_and_cache_flipp_deals(state, location, week_id).await
+        fetch_and_cache_flipp_deals(state, location).await
     } else {
-        fetch_and_cache_vision_deals(state, location, week_id).await
+        let week_id = queries::current_week_id();
+        let deals = fetch_and_cache_vision_deals(state, location, &week_id).await?;
+        Ok((deals, week_id))
     }
 }
 
 async fn fetch_and_cache_flipp_deals(
     state: &AppState,
     location: &StoreLocation,
-    week_id: &str,
-) -> Result<Vec<Deal>, AppError> {
+) -> Result<(Vec<Deal>, String), AppError> {
     let client = reqwest::Client::new();
 
     let flyers = flipp::search_flyers_by_zip(&client, &location.zip_code).await?;
@@ -99,6 +101,13 @@ async fn fetch_and_cache_flipp_deals(
             || f.chain_id == location.chain_id
     });
 
+    let valid_from = flyer.and_then(|f| f.valid_from.clone());
+    let valid_to = flyer.and_then(|f| f.valid_to.clone());
+    let week_id = valid_from
+        .as_deref()
+        .map(flipp::week_id_from_valid_from)
+        .unwrap_or_else(queries::current_week_id);
+
     let flyer_id = match flyer.and_then(|f| f.flyer_id) {
         Some(id) => id,
         None => {
@@ -107,7 +116,7 @@ async fn fetch_and_cache_flipp_deals(
                 location.id,
                 location.chain_id
             );
-            return Ok(vec![]);
+            return Ok((vec![], week_id));
         }
     };
 
@@ -205,13 +214,21 @@ async fn fetch_and_cache_flipp_deals(
         before - deal_tuples.len()
     );
 
-    queries::save_deals(&state.pool, location.id, week_id, &deal_tuples).await?;
+    queries::save_deals(
+        &state.pool,
+        location.id,
+        &week_id,
+        &deal_tuples,
+        valid_from.as_deref(),
+        valid_to.as_deref(),
+    )
+    .await?;
 
-    let deals = queries::get_cached_deals(&state.pool, location.id, week_id)
+    let deals = queries::get_cached_deals(&state.pool, location.id, &week_id)
         .await?
         .unwrap_or_default();
 
-    Ok(deals)
+    Ok((deals, week_id))
 }
 
 async fn fetch_and_cache_vision_deals(
@@ -228,7 +245,7 @@ async fn fetch_and_cache_vision_deals(
         return Ok(vec![]);
     }
 
-    queries::save_deals(&state.pool, location.id, week_id, &deal_tuples).await?;
+    queries::save_deals(&state.pool, location.id, week_id, &deal_tuples, None, None).await?;
 
     let deals = queries::get_cached_deals(&state.pool, location.id, week_id)
         .await?

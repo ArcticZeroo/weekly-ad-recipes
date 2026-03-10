@@ -14,6 +14,8 @@ pub struct Deal {
     pub deal_description: String,
     pub category: String,
     pub image_url: Option<String>,
+    pub valid_from: Option<String>,
+    pub valid_to: Option<String>,
     pub fetched_at: String,
 }
 

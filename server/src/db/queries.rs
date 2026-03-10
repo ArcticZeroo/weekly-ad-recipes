@@ -84,7 +84,7 @@ pub async fn get_cached_deals(
     let deals = sqlx::query_as!(
         Deal,
         r#"SELECT id as "id!", location_id as "location_id!", week_id, item_name, brand,
-           deal_description, category, image_url, fetched_at
+           deal_description, category, image_url, valid_from, valid_to, fetched_at
            FROM deals WHERE location_id = ? AND week_id = ?
            ORDER BY category, item_name"#,
         location_id,
@@ -115,11 +115,63 @@ pub async fn invalidate_deals_cache(
     Ok(())
 }
 
+pub async fn invalidate_all_deals_for_location(
+    pool: &SqlitePool,
+    location_id: i64,
+) -> Result<(), AppError> {
+    sqlx::query!(
+        "DELETE FROM deals WHERE location_id = ?",
+        location_id
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Get the most recent deals for a location regardless of week_id.
+/// Returns `Some((deals, week_id))` if any exist, `None` if empty.
+pub async fn get_current_deals(
+    pool: &SqlitePool,
+    location_id: i64,
+) -> Result<Option<(Vec<Deal>, String)>, AppError> {
+    let first = sqlx::query!(
+        "SELECT DISTINCT week_id FROM deals WHERE location_id = ? ORDER BY fetched_at DESC LIMIT 1",
+        location_id
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    let week_id = match first {
+        Some(row) => row.week_id,
+        None => return Ok(None),
+    };
+
+    match get_cached_deals(pool, location_id, &week_id).await? {
+        Some(deals) => Ok(Some((deals, week_id))),
+        None => Ok(None),
+    }
+}
+
+/// Check if deals are still valid based on their valid_to date.
+/// Returns true if any deal has a valid_to in the past.
+pub fn are_deals_expired(deals: &[Deal]) -> bool {
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    deals.first().and_then(|deal| deal.valid_to.as_ref()).map_or(
+        false,
+        |valid_to| {
+            let date_part = valid_to.split('T').next().unwrap_or(valid_to);
+            date_part < today.as_str()
+        },
+    )
+}
+
 pub async fn save_deals(
     pool: &SqlitePool,
     location_id: i64,
     week_id: &str,
     deals: &[(String, Option<String>, String, String, Option<String>)],
+    valid_from: Option<&str>,
+    valid_to: Option<&str>,
 ) -> Result<(), AppError> {
     sqlx::query!(
         "DELETE FROM deals WHERE location_id = ? AND week_id = ?",
@@ -132,8 +184,8 @@ pub async fn save_deals(
     for (item_name, brand, deal_description, category, image_url) in deals {
         sqlx::query!(
             r#"INSERT INTO deals (location_id, week_id, item_name, brand,
-               deal_description, category, image_url)
-               VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+               deal_description, category, image_url, valid_from, valid_to)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
             location_id,
             week_id,
             item_name,
@@ -141,6 +193,8 @@ pub async fn save_deals(
             deal_description,
             category,
             image_url,
+            valid_from,
+            valid_to,
         )
         .execute(pool)
         .await?;

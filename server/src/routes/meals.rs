@@ -13,22 +13,21 @@ pub async fn get_meals(
     Path((chain, zip)): Path<(String, String)>,
 ) -> Result<Json<MealsResponse>, AppError> {
     let location = resolve_or_create_location(&state, &chain, &zip).await?;
-    let week_id = queries::current_week_id();
+
+    let (deals, week_id) = match queries::get_current_deals(&state.pool, location.id).await? {
+        Some((deals, week_id)) if !queries::are_deals_expired(&deals) => (deals, week_id),
+        _ => {
+            return Ok(Json(MealsResponse {
+                chain_id: chain,
+                zip_code: zip,
+                week_id: String::new(),
+                meals: vec![],
+                cached: false,
+            }));
+        }
+    };
+
     let key = format!("{}:{}", location.id, week_id);
-
-    let deals = queries::get_cached_deals(&state.pool, location.id, &week_id)
-        .await?
-        .unwrap_or_default();
-
-    if deals.is_empty() {
-        return Ok(Json(MealsResponse {
-            chain_id: chain,
-            zip_code: zip,
-            week_id,
-            meals: vec![],
-            cached: false,
-        }));
-    }
 
     let deals_hash = state.resolve_deals_hash(location.id, &week_id, &deals);
 

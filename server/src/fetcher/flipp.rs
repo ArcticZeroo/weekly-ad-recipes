@@ -129,6 +129,17 @@ pub async fn search_flyers_by_zip(
     Ok(matches)
 }
 
+/// Derive a week_id from a Flipp flyer's valid_from date.
+/// Input format: "2026-03-04T00:00:00-05:00" → Output: "flipp-20260304"
+pub fn week_id_from_valid_from(valid_from: &str) -> String {
+    let date_part = valid_from
+        .split('T')
+        .next()
+        .unwrap_or(valid_from)
+        .replace('-', "");
+    format!("flipp-{}", date_part)
+}
+
 /// Higher priority = more likely to be the main grocery weekly ad
 fn flyer_priority(flyer_name: &str) -> i32 {
     if flyer_name.contains("weekly ad") || flyer_name.contains("weekly circular") {

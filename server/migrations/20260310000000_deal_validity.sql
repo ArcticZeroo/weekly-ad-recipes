@@ -1,0 +1,2 @@
+ALTER TABLE deals ADD COLUMN valid_from TEXT;
+ALTER TABLE deals ADD COLUMN valid_to TEXT;
