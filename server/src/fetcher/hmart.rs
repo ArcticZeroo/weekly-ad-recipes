@@ -115,26 +115,31 @@ pub async fn fetch_hmart_deals(
     let client = reqwest::Client::new();
     let (weekly_image_url, page_monthly_urls) = fetch_hmart_ad_image_urls(&client).await?;
 
-    // --- Weekly ad ---
-    tracing::info!("Downloading H Mart weekly flyer: {}", weekly_image_url);
-    let weekly_bytes = download_image(&client, &weekly_image_url).await?;
+    // Run weekly and monthly pipelines in parallel
+    let weekly_future = async {
+        tracing::info!("Downloading H Mart weekly flyer: {}", weekly_image_url);
+        let weekly_bytes = download_image(&client, &weekly_image_url).await?;
 
-    let (mut weekly_deals, valid_from, valid_to) =
-        extract_hmart_deals_with_dates(&state.ai, &[weekly_bytes]).await?;
+        let (mut weekly_deals, valid_from, valid_to) =
+            extract_hmart_deals_with_dates(&state.ai, &[weekly_bytes]).await?;
 
-    let week_id = week_id_from_valid_dates(&valid_from, &valid_to);
-    tracing::info!(
-        "H Mart weekly flyer valid {valid_from} to {valid_to} (week_id: {week_id}), extracted {} raw deals",
-        weekly_deals.len()
-    );
+        let week_id = week_id_from_valid_dates(&valid_from, &valid_to);
+        tracing::info!(
+            "H Mart weekly flyer valid {valid_from} to {valid_to} (week_id: {week_id}), extracted {} raw deals",
+            weekly_deals.len()
+        );
 
-    categorize_deal_tuples(&state.ai, &mut weekly_deals).await;
+        categorize_deal_tuples(&state.ai, &mut weekly_deals).await;
 
-    // --- Monthly ad (if present) ---
-    let (monthly_deals, monthly_week_id) = fetch_monthly_deals_if_needed(
-        state, &client, &page_monthly_urls,
-    )
-    .await;
+        Ok::<_, AppError>((weekly_deals, week_id, valid_from, valid_to))
+    };
+
+    let monthly_future = fetch_monthly_deals_if_needed(state, &client, &page_monthly_urls);
+
+    let (weekly_result, (monthly_deals, monthly_week_id)) =
+        tokio::join!(weekly_future, monthly_future);
+
+    let (weekly_deals, week_id, valid_from, valid_to) = weekly_result?;
 
     Ok(HmartDealsResult {
         weekly_deals,
