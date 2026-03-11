@@ -120,18 +120,36 @@ pub async fn fetch_hmart_deals(
         tracing::info!("Downloading H Mart weekly flyer: {}", weekly_image_url);
         let weekly_bytes = download_image(&client, &weekly_image_url).await?;
 
-        let (mut weekly_deals, valid_from, valid_to) =
-            extract_hmart_deals_with_dates(&state.ai, &[weekly_bytes]).await?;
+        let vision_result =
+            extract_hmart_deals_with_dates(&state.ai, &[weekly_bytes.clone()]).await?;
 
-        let week_id = week_id_from_valid_dates(&valid_from, &valid_to);
+        let week_id = week_id_from_valid_dates(&vision_result.valid_from, &vision_result.valid_to);
         tracing::info!(
-            "H Mart weekly flyer valid {valid_from} to {valid_to} (week_id: {week_id}), extracted {} raw deals",
-            weekly_deals.len()
+            "H Mart weekly flyer valid {} to {} (week_id: {week_id}), extracted {} raw deals",
+            vision_result.valid_from,
+            vision_result.valid_to,
+            vision_result.deals.len()
         );
+
+        // Crop thumbnails from the flyer image
+        let thumbnails = crop_and_save_thumbnails(
+            &weekly_bytes,
+            vision_result.grid_rows,
+            vision_result.grid_cols,
+            &vision_result.deal_positions,
+        );
+
+        // Assign thumbnail URLs to deals
+        let mut weekly_deals = vision_result.deals;
+        for (deal_index, thumbnail_url) in &thumbnails {
+            if let Some(deal) = weekly_deals.get_mut(*deal_index) {
+                deal.4 = Some(thumbnail_url.clone());
+            }
+        }
 
         categorize_deal_tuples(&state.ai, &mut weekly_deals).await;
 
-        Ok::<_, AppError>((weekly_deals, week_id, valid_from, valid_to))
+        Ok::<_, AppError>((weekly_deals, week_id, vision_result.valid_from, vision_result.valid_to))
     };
 
     let monthly_future = fetch_monthly_deals_if_needed(state, &client, &page_monthly_urls);
@@ -332,11 +350,20 @@ async fn categorize_deal_tuples(
     }
 }
 
+struct VisionResult {
+    deals: Vec<DealTuple>,
+    valid_from: String,
+    valid_to: String,
+    grid_rows: u32,
+    grid_cols: u32,
+    deal_positions: Vec<(usize, u32, u32)>, // (deal_index, row, col)
+}
+
 /// Extract deals AND valid dates from H Mart flyer images in a single Vision call.
 async fn extract_hmart_deals_with_dates(
     ai: &crate::ai::client::AnthropicClient,
     images: &[Vec<u8>],
-) -> Result<(Vec<DealTuple>, String, String), AppError> {
+) -> Result<VisionResult, AppError> {
     let mut content_blocks: Vec<serde_json::Value> = Vec::new();
 
     let label = if images.len() > 1 {
@@ -382,11 +409,15 @@ async fn extract_hmart_deals_with_dates(
                      2. All grocery deals with item name, brand (if shown), and deal description (price or discount).\n\n\
                      For deal_description, always include the dollar sign for prices (e.g., \"$2.99/lb\", \"$5.99\", \"2 for $5\", \"Buy 1 Get 1 Free\"). \
                      Read prices carefully from the image — make sure you're reading the correct price for each item.\n\n\
+                     For each deal, also estimate its grid position in the flyer as row and column (0-indexed, \
+                     reading left-to-right, top-to-bottom). The flyer is typically laid out in a grid of product tiles.\n\n\
                      Respond with ONLY a JSON object in this format:\n\
                      {\n\
                        \"valid_from\": \"YYYYMMDD\",\n\
                        \"valid_to\": \"YYYYMMDD\",\n\
-                       \"deals\": [{\"item_name\": \"...\", \"brand\": \"...\", \"deal_description\": \"...\", \"category\": \"...\"}]\n\
+                       \"grid_rows\": 4,\n\
+                       \"grid_cols\": 5,\n\
+                       \"deals\": [{\"item_name\": \"...\", \"brand\": \"...\", \"deal_description\": \"...\", \"category\": \"...\", \"row\": 0, \"col\": 0}]\n\
                      }\n\
                      Categories: produce, meat, dairy, bakery, frozen, pantry, beverages, snacks, deli, seafood.\n\
                      If brand is unknown, use null. Output only the JSON object."
@@ -417,6 +448,8 @@ async fn extract_hmart_deals_with_dates(
         .and_then(|v| v.as_str())
         .unwrap_or("unknown")
         .to_string();
+    let grid_rows = parsed.get("grid_rows").and_then(|v| v.as_u64()).unwrap_or(4) as u32;
+    let grid_cols = parsed.get("grid_cols").and_then(|v| v.as_u64()).unwrap_or(5) as u32;
 
     let deals_array = parsed
         .get("deals")
@@ -424,36 +457,48 @@ async fn extract_hmart_deals_with_dates(
         .cloned()
         .unwrap_or_default();
 
-    let deal_tuples = deals_array
-        .into_iter()
-        .filter_map(|item| {
-            let name = item.get("item_name")?.as_str()?.trim().to_string();
-            if name.is_empty() {
-                return None;
-            }
-            let brand = item
-                .get("brand")
-                .and_then(|v| v.as_str())
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty());
-            let description = item
-                .get("deal_description")
-                .and_then(|v| v.as_str())
-                .unwrap_or("On Sale")
-                .trim()
-                .to_string();
-            let category = item
-                .get("category")
-                .and_then(|v| v.as_str())
-                .unwrap_or("uncategorized")
-                .trim()
-                .to_lowercase();
+    let mut deal_tuples = Vec::new();
+    let mut deal_positions = Vec::new();
 
-            Some((name, brand, description, category, None))
-        })
-        .collect();
+    for item in &deals_array {
+        let name = match item.get("item_name").and_then(|v| v.as_str()) {
+            Some(name) if !name.trim().is_empty() => name.trim().to_string(),
+            _ => continue,
+        };
+        let brand = item
+            .get("brand")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let description = item
+            .get("deal_description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("On Sale")
+            .trim()
+            .to_string();
+        let category = item
+            .get("category")
+            .and_then(|v| v.as_str())
+            .unwrap_or("uncategorized")
+            .trim()
+            .to_lowercase();
 
-    Ok((deal_tuples, valid_from, valid_to))
+        let row = item.get("row").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+        let col = item.get("col").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+
+        let deal_index = deal_tuples.len();
+        deal_tuples.push((name, brand, description, category, None));
+        deal_positions.push((deal_index, row, col));
+    }
+
+    Ok(VisionResult {
+        deals: deal_tuples,
+        valid_from,
+        valid_to,
+        grid_rows,
+        grid_cols,
+        deal_positions,
+    })
 }
 
 fn extract_json_object(text: &str) -> &str {
@@ -478,6 +523,78 @@ fn detect_image_media_type(bytes: &[u8]) -> &'static str {
     } else {
         "image/jpeg"
     }
+}
+
+/// Crop deal thumbnails from the flyer image based on grid positions from Vision.
+/// Saves each crop to `data/thumbnails/{hash}.jpg` and returns a map of deal_index → URL path.
+fn crop_and_save_thumbnails(
+    image_bytes: &[u8],
+    grid_rows: u32,
+    grid_cols: u32,
+    deal_positions: &[(usize, u32, u32)],
+) -> std::collections::HashMap<usize, String> {
+    let mut result = std::collections::HashMap::new();
+
+    let image = match image::load_from_memory(image_bytes) {
+        Ok(image) => image,
+        Err(error) => {
+            tracing::warn!("Failed to load flyer image for thumbnail cropping: {error}");
+            return result;
+        }
+    };
+
+    let width = image.width();
+    let height = image.height();
+    let cell_width = width / grid_cols;
+    let cell_height = height / grid_rows;
+
+    let thumbnail_directory = std::path::Path::new("data/thumbnails");
+    if let Err(error) = std::fs::create_dir_all(thumbnail_directory) {
+        tracing::warn!("Failed to create thumbnail directory: {error}");
+        return result;
+    }
+
+    for &(deal_index, row, col) in deal_positions {
+        if row >= grid_rows || col >= grid_cols {
+            continue;
+        }
+
+        let x = col * cell_width;
+        let y = row * cell_height;
+        let crop = image.crop_imm(x, y, cell_width, cell_height);
+
+        let thumbnail = crop.resize(300, 300, image::imageops::FilterType::Lanczos3);
+
+        let filename = format!("{:016x}.jpg", {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut hasher = DefaultHasher::new();
+            (row, col, width, height).hash(&mut hasher);
+            hasher.finish()
+        });
+
+        let file_path = thumbnail_directory.join(&filename);
+        match thumbnail.save(&file_path) {
+            Ok(_) => {
+                let url_path = format!("/api/thumbnails/{}", filename);
+                result.insert(deal_index, url_path);
+            }
+            Err(error) => {
+                tracing::warn!("Failed to save thumbnail {}: {error}", file_path.display());
+            }
+        }
+    }
+
+    tracing::info!(
+        "Cropped {} thumbnails from {}x{} flyer ({}x{} grid)",
+        result.len(),
+        width,
+        height,
+        grid_rows,
+        grid_cols
+    );
+
+    result
 }
 
 async fn download_image(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, AppError> {
