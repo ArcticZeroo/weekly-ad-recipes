@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id as \"id!\", location_id as \"location_id!\", week_id, item_name, brand,\n           deal_description, category, image_url, fetched_at\n           FROM deals WHERE location_id = ? AND week_id = ?\n           ORDER BY category, item_name",
+  "query": "SELECT id as \"id!\", location_id as \"location_id!\", week_id, item_name, brand,\n           deal_description, category, image_url, valid_from, valid_to, fetched_at\n           FROM deals WHERE location_id = ? AND week_id = ?\n           ORDER BY category, item_name",
   "describe": {
     "columns": [
       {
@@ -44,8 +44,18 @@
         "type_info": "Text"
       },
       {
-        "name": "fetched_at",
+        "name": "valid_from",
         "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "valid_to",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "fetched_at",
+        "ordinal": 10,
         "type_info": "Text"
       }
     ],
@@ -61,8 +71,10 @@
       false,
       false,
       true,
+      true,
+      true,
       false
     ]
   },
-  "hash": "b2d721a96767bd5e62e57def58e035f0560bfef3bf6a304f33e89521a81d8af6"
+  "hash": "4a50a1b158c30ca7f03f1ce4c4085579b26713ee13d0b56eac651430ae3f8fdf"
 }

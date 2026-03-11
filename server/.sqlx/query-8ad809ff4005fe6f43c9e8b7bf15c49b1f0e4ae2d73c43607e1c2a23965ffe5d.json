@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT d.week_id FROM deals d JOIN store_locations sl ON d.location_id = sl.id WHERE sl.chain_id = 'h-mart' ORDER BY d.week_id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "week_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8ad809ff4005fe6f43c9e8b7bf15c49b1f0e4ae2d73c43607e1c2a23965ffe5d"
+}

@@ -1,2 +1,5 @@
+[alias]
+prepare = "sqlx prepare"
+
 [env]
 TS_RS_EXPORT_DIR = { value = "../client/src/models/generated/", relative = true }

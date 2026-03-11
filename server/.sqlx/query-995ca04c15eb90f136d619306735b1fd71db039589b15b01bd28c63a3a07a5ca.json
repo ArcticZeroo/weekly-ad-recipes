@@ -1,0 +1,80 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!\", location_id as \"location_id!\", week_id, item_name, brand,\n           deal_description, category, image_url, valid_from, valid_to, fetched_at\n           FROM deals WHERE location_id = ?\n           ORDER BY category, item_name",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "location_id!",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "week_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "item_name",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "brand",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "deal_description",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "category",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "image_url",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "valid_from",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "valid_to",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "fetched_at",
+        "ordinal": 10,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "995ca04c15eb90f136d619306735b1fd71db039589b15b01bd28c63a3a07a5ca"
+}
