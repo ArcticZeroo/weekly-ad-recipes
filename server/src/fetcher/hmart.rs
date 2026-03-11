@@ -159,6 +159,8 @@ async fn extract_hmart_deals_with_dates(
         image_bytes,
     );
 
+    let media_type = detect_image_media_type(image_bytes);
+
     let content_blocks = vec![
         serde_json::json!({
             "type": "text",
@@ -168,7 +170,7 @@ async fn extract_hmart_deals_with_dates(
             "type": "image",
             "source": {
                 "type": "base64",
-                "media_type": "image/jpeg",
+                "media_type": media_type,
                 "data": b64
             }
         }),
@@ -261,6 +263,20 @@ fn extract_json_object(text: &str) -> &str {
         }
     }
     text
+}
+
+fn detect_image_media_type(bytes: &[u8]) -> &'static str {
+    if bytes.starts_with(b"RIFF") && bytes.len() > 12 && &bytes[8..12] == b"WEBP" {
+        "image/webp"
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        "image/jpeg"
+    } else if bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47]) {
+        "image/png"
+    } else if bytes.starts_with(b"GIF") {
+        "image/gif"
+    } else {
+        "image/jpeg"
+    }
 }
 
 async fn fetch_hmart_flyer_image() -> Result<Vec<u8>, AppError> {
