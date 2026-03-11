@@ -74,17 +74,24 @@ pub fn week_id_from_valid_dates(valid_from: &str, valid_to: &str) -> String {
     format!("hmart-{}-{}", from_clean, to_clean)
 }
 
+pub struct HmartDealsResult {
+    pub weekly_deals: Vec<DealTuple>,
+    pub weekly_week_id: String,
+    pub weekly_valid_from: String,
+    pub weekly_valid_to: String,
+    pub monthly_deals: Vec<DealTuple>,
+    pub monthly_week_id: Option<String>,
+}
+
 /// Fetch H Mart deals via the vision pipeline.
 ///
-/// If a sibling H Mart location already has deals for this ad period, copies them
-/// instead of making another Vision API call.
-///
-/// Returns `(deals, week_id)` — the week_id is derived from the flyer's valid dates.
+/// Fetches weekly and monthly ads separately. Monthly ads are cached with a
+/// month-based week_id to avoid re-running Vision every week.
 pub async fn fetch_hmart_deals(
     state: &AppState,
-    location: &StoreLocation,
-) -> Result<(Vec<DealTuple>, String), AppError> {
-    // Check if we already have H Mart deals cached
+    _location: &StoreLocation,
+) -> Result<HmartDealsResult, AppError> {
+    // Check if we already have H Mart weekly deals cached from a sibling
     if let Some(existing_week_id) = current_hmart_week_id(&state.pool).await? {
         if let Some(sibling_deals) = fetch_sibling_deals(&state.pool, &existing_week_id).await? {
             tracing::info!(
@@ -92,79 +99,129 @@ pub async fn fetch_hmart_deals(
                 sibling_deals.len(),
                 existing_week_id
             );
-            return Ok((sibling_deals_to_tuples(&sibling_deals), existing_week_id));
+            let valid_from = sibling_deals.first().and_then(|d| d.valid_from.clone()).unwrap_or_default();
+            let valid_to = sibling_deals.first().and_then(|d| d.valid_to.clone()).unwrap_or_default();
+            return Ok(HmartDealsResult {
+                weekly_deals: sibling_deals_to_tuples(&sibling_deals),
+                weekly_week_id: existing_week_id,
+                weekly_valid_from: valid_from,
+                weekly_valid_to: valid_to,
+                monthly_deals: vec![],
+                monthly_week_id: None,
+            });
         }
     }
 
-    // Fetch the flyer image and extract deals + valid dates via Vision
-    let image_bytes = fetch_hmart_flyer_image().await?;
+    let client = reqwest::Client::new();
+    let (weekly_image_url, page_monthly_urls) = fetch_hmart_ad_image_urls(&client).await?;
 
-    tracing::info!(
-        "Sending H Mart flyer image ({} bytes) to Vision AI for location {}",
-        image_bytes.len(),
-        location.id
-    );
+    // --- Weekly ad ---
+    tracing::info!("Downloading H Mart weekly flyer: {}", weekly_image_url);
+    let weekly_bytes = download_image(&client, &weekly_image_url).await?;
 
-    let (mut deal_tuples, valid_from, valid_to) =
-        extract_hmart_deals_with_dates(&state.ai, &image_bytes).await?;
+    let (mut weekly_deals, valid_from, valid_to) =
+        extract_hmart_deals_with_dates(&state.ai, &[weekly_bytes]).await?;
 
     let week_id = week_id_from_valid_dates(&valid_from, &valid_to);
     tracing::info!(
-        "H Mart flyer valid {valid_from} to {valid_to} (week_id: {week_id}), extracted {} raw deals",
-        deal_tuples.len()
+        "H Mart weekly flyer valid {valid_from} to {valid_to} (week_id: {week_id}), extracted {} raw deals",
+        weekly_deals.len()
     );
 
-    // Check if we already have deals for this specific ad period (from a previous fetch)
-    if let Some(sibling_deals) = fetch_sibling_deals(&state.pool, &week_id).await? {
-        tracing::info!("Deals already cached for {week_id}, reusing");
-        return Ok((sibling_deals_to_tuples(&sibling_deals), week_id));
-    }
+    categorize_deal_tuples(&state.ai, &mut weekly_deals).await;
 
-    // Categorize
-    let items_for_categorization: Vec<(String, Option<String>)> = deal_tuples
-        .iter()
-        .map(|(name, brand, _, _, _)| (name.clone(), brand.clone()))
-        .collect();
+    // --- Monthly ad (if present) ---
+    let (monthly_deals, monthly_week_id) = fetch_monthly_deals_if_needed(
+        state, &client, &page_monthly_urls,
+    )
+    .await;
 
-    match crate::ai::categorize::categorize_items(&state.ai, &items_for_categorization).await {
-        Ok(categories) => {
-            for deal in &mut deal_tuples {
-                if let Some(category) = categories.get(&deal.0) {
-                    deal.3 = category.clone();
-                }
-            }
-            let before = deal_tuples.len();
-            deal_tuples.retain(|deal| deal.3 != "not_food");
-            tracing::info!(
-                "Categorized {} H Mart deals, filtered {} non-food",
-                categories.len(),
-                before - deal_tuples.len()
-            );
-        }
-        Err(error) => {
-            tracing::warn!("AI categorization failed for H Mart deals: {error}");
-        }
-    }
-
-    Ok((deal_tuples, week_id))
+    Ok(HmartDealsResult {
+        weekly_deals,
+        weekly_week_id: week_id,
+        weekly_valid_from: valid_from,
+        weekly_valid_to: valid_to,
+        monthly_deals: monthly_deals.unwrap_or_default(),
+        monthly_week_id,
+    })
 }
 
-/// Extract deals AND valid dates from the H Mart flyer image in a single Vision call.
-async fn extract_hmart_deals_with_dates(
+/// Fetch monthly ad deals, using cached results if available.
+/// Returns `(deals, week_id)` if a monthly ad was found.
+async fn fetch_monthly_deals_if_needed(
+    state: &AppState,
+    client: &reqwest::Client,
+    page_monthly_urls: &[String],
+) -> (Option<Vec<DealTuple>>, Option<String>) {
+    let monthly_week_id = current_monthly_id();
+
+    // Check if monthly deals are already cached for any h-mart location
+    if let Ok(Some(cached)) = fetch_sibling_deals(&state.pool, &monthly_week_id).await {
+        tracing::info!(
+            "Using {} cached monthly deals ({})",
+            cached.len(),
+            monthly_week_id
+        );
+        return (Some(sibling_deals_to_tuples(&cached)), Some(monthly_week_id));
+    }
+
+    // Try to find a monthly ad image: first from the page, then from the popup API
+    let mut monthly_url = page_monthly_urls.first().cloned();
+
+    if monthly_url.is_none() {
+        if let Ok(Some(popup_url)) = fetch_hmart_popup_image_url(client).await {
+            monthly_url = Some(popup_url);
+        }
+    }
+
+    let monthly_url = match monthly_url {
+        Some(url) => url,
+        None => return (None, None),
+    };
+
+    tracing::info!("Downloading H Mart monthly ad: {}", monthly_url);
+    let monthly_bytes = match download_image(client, &monthly_url).await {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            tracing::warn!("Failed to download monthly ad: {error}");
+            return (None, None);
+        }
+    };
+
+    let monthly_deals = match extract_hmart_monthly_deals(&state.ai, &monthly_bytes).await {
+        Ok(deals) => deals,
+        Err(error) => {
+            tracing::warn!("Failed to extract monthly ad deals: {error}");
+            return (None, None);
+        }
+    };
+
+    let mut categorized = monthly_deals;
+    categorize_deal_tuples(&state.ai, &mut categorized).await;
+
+    (Some(categorized), Some(monthly_week_id))
+}
+
+fn current_monthly_id() -> String {
+    let now = chrono::Utc::now();
+    format!("hmart-monthly-{}", now.format("%Y%m"))
+}
+
+/// Extract deals from a monthly ad image (no date extraction needed).
+async fn extract_hmart_monthly_deals(
     ai: &crate::ai::client::AnthropicClient,
     image_bytes: &[u8],
-) -> Result<(Vec<DealTuple>, String, String), AppError> {
+) -> Result<Vec<DealTuple>, AppError> {
     let b64 = base64::Engine::encode(
         &base64::engine::general_purpose::STANDARD,
         image_bytes,
     );
-
     let media_type = detect_image_media_type(image_bytes);
 
     let content_blocks = vec![
         serde_json::json!({
             "type": "text",
-            "text": "This is an H Mart grocery weekly ad flyer:"
+            "text": "This is an H Mart monthly deals advertisement:"
         }),
         serde_json::json!({
             "type": "image",
@@ -175,6 +232,144 @@ async fn extract_hmart_deals_with_dates(
             }
         }),
         serde_json::json!({
+            "type": "text",
+            "text": "Extract all grocery deals from this monthly ad image.\n\
+                     For each deal, provide the item name, brand (if shown), and deal description.\n\n\
+                     For deal_description, always include the dollar sign for prices (e.g., \"$2.99/lb\", \"$5.99\", \"2 for $5\").\n\
+                     Read prices carefully from the image.\n\n\
+                     Respond with ONLY a JSON array of objects:\n\
+                     [{\"item_name\": \"...\", \"brand\": \"...\", \"deal_description\": \"...\", \"category\": \"...\"}]\n\
+                     Categories: produce, meat, dairy, bakery, frozen, pantry, beverages, snacks, deli, seafood.\n\
+                     If brand is unknown, use null. Output only the JSON array."
+        }),
+    ];
+
+    let response = ai
+        .send_with_images("claude-sonnet-4-20250514", 4096, content_blocks)
+        .await?;
+
+    let json_str = extract_json_array(&response);
+
+    let items: Vec<std::collections::HashMap<String, serde_json::Value>> =
+        serde_json::from_str(json_str).map_err(|error| {
+            tracing::warn!("Failed to parse monthly deals response: {error}\nResponse: {response}");
+            AppError::Ai(format!("Failed to parse monthly deals: {error}"))
+        })?;
+
+    let deals = items
+        .into_iter()
+        .filter_map(|item| {
+            let name = item.get("item_name")?.as_str()?.trim().to_string();
+            if name.is_empty() {
+                return None;
+            }
+            let brand = item
+                .get("brand")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+            let description = item
+                .get("deal_description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("On Sale")
+                .trim()
+                .to_string();
+            let category = item
+                .get("category")
+                .and_then(|v| v.as_str())
+                .unwrap_or("uncategorized")
+                .trim()
+                .to_lowercase();
+            Some((name, brand, description, category, None))
+        })
+        .collect();
+
+    Ok(deals)
+}
+
+fn extract_json_array(text: &str) -> &str {
+    let text = text.trim();
+    if let Some(start) = text.find('[') {
+        if let Some(end) = text.rfind(']') {
+            return &text[start..=end];
+        }
+    }
+    text
+}
+
+async fn categorize_deal_tuples(
+    ai: &crate::ai::client::AnthropicClient,
+    deal_tuples: &mut Vec<DealTuple>,
+) {
+    let items_for_categorization: Vec<(String, Option<String>)> = deal_tuples
+        .iter()
+        .map(|(name, brand, _, _, _)| (name.clone(), brand.clone()))
+        .collect();
+
+    match crate::ai::categorize::categorize_items(ai, &items_for_categorization).await {
+        Ok(categories) => {
+            for deal in deal_tuples.iter_mut() {
+                if let Some(category) = categories.get(&deal.0) {
+                    deal.3 = category.clone();
+                }
+            }
+            let before = deal_tuples.len();
+            deal_tuples.retain(|deal| deal.3 != "not_food");
+            tracing::info!(
+                "Categorized {} deals, filtered {} non-food",
+                categories.len(),
+                before - deal_tuples.len()
+            );
+        }
+        Err(error) => {
+            tracing::warn!("AI categorization failed: {error}");
+        }
+    }
+}
+
+/// Extract deals AND valid dates from H Mart flyer images in a single Vision call.
+async fn extract_hmart_deals_with_dates(
+    ai: &crate::ai::client::AnthropicClient,
+    images: &[Vec<u8>],
+) -> Result<(Vec<DealTuple>, String, String), AppError> {
+    let mut content_blocks: Vec<serde_json::Value> = Vec::new();
+
+    let label = if images.len() > 1 {
+        "These are H Mart grocery ad flyer images (weekly and/or monthly deals):"
+    } else {
+        "This is an H Mart grocery weekly ad flyer:"
+    };
+
+    content_blocks.push(serde_json::json!({
+        "type": "text",
+        "text": label
+    }));
+
+    for (index, image_bytes) in images.iter().enumerate() {
+        let b64 = base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            image_bytes,
+        );
+        let media_type = detect_image_media_type(image_bytes);
+
+        if images.len() > 1 {
+            content_blocks.push(serde_json::json!({
+                "type": "text",
+                "text": format!("Image {} of {}:", index + 1, images.len())
+            }));
+        }
+
+        content_blocks.push(serde_json::json!({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": media_type,
+                "data": b64
+            }
+        }));
+    }
+
+    content_blocks.push(serde_json::json!({
             "type": "text",
             "text": "Extract two things from this flyer:\n\
                      1. The valid date range (e.g., \"03/06\" to \"03/12\", or \"March 6\" to \"March 12\"). \
@@ -190,8 +385,7 @@ async fn extract_hmart_deals_with_dates(
                      }\n\
                      Categories: produce, meat, dairy, bakery, frozen, pantry, beverages, snacks, deli, seafood.\n\
                      If brand is unknown, use null. Output only the JSON object."
-        }),
-    ];
+    }));
 
     let response = ai
         .send_with_images(
@@ -281,24 +475,25 @@ fn detect_image_media_type(bytes: &[u8]) -> &'static str {
     }
 }
 
-async fn fetch_hmart_flyer_image() -> Result<Vec<u8>, AppError> {
-    let client = reqwest::Client::new();
-    let image_url = fetch_hmart_deal_image_url(&client).await?;
-
-    tracing::info!("Downloading H Mart flyer image: {}", image_url);
-
+async fn download_image(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, AppError> {
     let image_bytes = client
-        .get(&image_url)
+        .get(url)
         .send()
         .await?
         .bytes()
         .await?
         .to_vec();
-
     Ok(image_bytes)
 }
 
-async fn fetch_hmart_deal_image_url(client: &reqwest::Client) -> Result<String, AppError> {
+const HMART_POPUP_API_URL: &str =
+    "https://www.hmartus.com/api/popup-overlay/render?currentUrl=%2Fweekly-sale-wa";
+
+/// Fetch all H Mart ad image URLs from the weekly sale page.
+/// Returns `(weekly_url, additional_urls)` where additional_urls may include monthly ads.
+async fn fetch_hmart_ad_image_urls(
+    client: &reqwest::Client,
+) -> Result<(String, Vec<String>), AppError> {
     let html = client
         .get(HMART_WA_WEEKLY_AD_URL)
         .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
@@ -309,46 +504,106 @@ async fn fetch_hmart_deal_image_url(client: &reqwest::Client) -> Result<String, 
 
     tracing::info!("H Mart page HTML length: {} chars", html.len());
 
-    // Try multiple patterns to find the English flyer image
-    let patterns = [
+    // Find the weekly English flyer image
+    let weekly_patterns = [
         Regex::new(r#"src="(https://images\.squarespace-cdn\.com/[^"]*Weekly_eng[^"]*)""#).unwrap(),
         Regex::new(r#"data-src="([^"]*Weekly_eng[^"]*)""#).unwrap(),
         Regex::new(r#"data-image="([^"]*Weekly_eng[^"]*)""#).unwrap(),
     ];
 
-    for pattern in &patterns {
+    let mut weekly_url = None;
+    for pattern in &weekly_patterns {
         if let Some(capture) = pattern.captures(&html) {
             if let Some(matched) = capture.get(1) {
-                let url = matched.as_str().to_string();
-                let url = if url.contains('?') {
-                    url
-                } else {
-                    format!("{}?format=2500w", url)
-                };
-                tracing::info!("Found H Mart English flyer image via pattern: {}", pattern.as_str());
-                return Ok(url);
+                let url = append_format_if_needed(matched.as_str(), "2500w");
+                tracing::info!("Found H Mart weekly flyer via: {}", pattern.as_str());
+                weekly_url = Some(url);
+                break;
             }
         }
     }
 
-    // Log what images we did find to help debug
-    let all_images = Regex::new(r#"data-image="([^"]*)""#).unwrap();
-    let found_images: Vec<&str> = all_images
-        .captures_iter(&html)
-        .filter_map(|capture| capture.get(1).map(|matched| matched.as_str()))
-        .collect();
-    tracing::warn!(
-        "Could not find English weekly ad image. Found {} data-image URLs on page. HTML starts with: {}",
-        found_images.len(),
-        &html[..html.len().min(500)]
-    );
-    for (index, url) in found_images.iter().enumerate() {
-        tracing::warn!("  [{}] {}", index, url);
+    let weekly_url = match weekly_url {
+        Some(url) => url,
+        None => {
+            let all_images = Regex::new(r#"data-image="([^"]*)""#).unwrap();
+            let found: Vec<&str> = all_images
+                .captures_iter(&html)
+                .filter_map(|c| c.get(1).map(|m| m.as_str()))
+                .collect();
+            tracing::warn!(
+                "Could not find weekly ad image. Found {} data-image URLs. HTML starts with: {}",
+                found.len(),
+                &html[..html.len().min(500)]
+            );
+            for (index, url) in found.iter().enumerate() {
+                tracing::warn!("  [{}] {}", index, url);
+            }
+            return Err(AppError::Internal(
+                "Could not find English weekly ad image on H Mart WA page".into(),
+            ));
+        }
+    };
+
+    // Check for monthly ad images on the page itself
+    let mut additional_urls = Vec::new();
+    let monthly_pattern = Regex::new(
+        r#"(?:src|data-src|data-image)="(https://images\.squarespace-cdn\.com/[^"]*[Mm]onthly[^"]*)""#
+    ).unwrap();
+    for capture in monthly_pattern.captures_iter(&html) {
+        if let Some(matched) = capture.get(1) {
+            let url = append_format_if_needed(matched.as_str(), "2500w");
+            if !additional_urls.contains(&url) {
+                tracing::info!("Found monthly ad on page: {}", url);
+                additional_urls.push(url);
+            }
+        }
     }
 
-    Err(AppError::Internal(
-        "Could not find English weekly ad image on H Mart WA page".into(),
-    ))
+    Ok((weekly_url, additional_urls))
+}
+
+/// Check the Squarespace popup overlay API for a monthly ad image.
+async fn fetch_hmart_popup_image_url(
+    client: &reqwest::Client,
+) -> Result<Option<String>, AppError> {
+    let response = client
+        .get(HMART_POPUP_API_URL)
+        .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .send()
+        .await?
+        .text()
+        .await?;
+
+    let parsed: serde_json::Value = match serde_json::from_str(&response) {
+        Ok(value) => value,
+        Err(_) => return Ok(None),
+    };
+
+    let rendered_html = parsed
+        .get("renderedHtml")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    let image_pattern = Regex::new(
+        r#"https://images\.squarespace-cdn\.com/content/[^"\\]*(?:[Mm]onthly|[Aa]d)[^"\\]*\.(?:jpg|jpeg|png|webp)"#
+    ).unwrap();
+
+    if let Some(matched) = image_pattern.find(rendered_html) {
+        let url = append_format_if_needed(matched.as_str(), "2500w");
+        tracing::info!("Found ad image in popup overlay: {}", url);
+        return Ok(Some(url));
+    }
+
+    Ok(None)
+}
+
+fn append_format_if_needed(url: &str, format: &str) -> String {
+    if url.contains('?') {
+        url.to_string()
+    } else {
+        format!("{}?format={}", url, format)
+    }
 }
 
 async fn fetch_sibling_deals(

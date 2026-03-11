@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use axum::extract::{Path, State};
 use axum::Json;
+use chrono::Datelike;
 
 use crate::db::queries;
 use crate::error::AppError;
@@ -58,15 +59,26 @@ async fn ensure_current_deals(
         if let Some((deals, week_id)) =
             queries::get_current_deals(&state.pool, location.id).await?
         {
-            if !queries::are_deals_expired(&deals) {
-                state.resolve_deals_hash(location.id, &week_id, &deals);
-                return Ok((deals, week_id, true));
+            // Filter out expired deals, keep valid ones
+            let (valid_deals, expired_week_ids) = partition_expired_deals(deals);
+
+            // Clean up expired batches
+            for expired_id in &expired_week_ids {
+                queries::invalidate_deals_cache(&state.pool, location.id, expired_id).await?;
             }
-            tracing::info!(
-                "Deals expired for location {} (week: {week_id}), will refresh",
-                location.id
-            );
-            queries::invalidate_deals_cache(&state.pool, location.id, &week_id).await?;
+
+            if !valid_deals.is_empty() && expired_week_ids.is_empty() {
+                state.resolve_deals_hash(location.id, &week_id, &valid_deals);
+                return Ok((valid_deals, week_id, true));
+            }
+
+            if !valid_deals.is_empty() {
+                // Some deals still valid but need to refetch expired ones
+                tracing::info!(
+                    "Some deal batches expired for location {}, refetching",
+                    location.id
+                );
+            }
         }
 
         match state.deals_tracker.try_acquire(&key) {
@@ -75,14 +87,54 @@ async fn ensure_current_deals(
                 notify.notified().await;
             }
             AcquireResult::Lead(guard) => {
-                let (deals, week_id) =
+                let (new_deals, week_id) =
                     fetch_deals_from_source(state, location).await?;
-                state.resolve_deals_hash(location.id, &week_id, &deals);
+
+                // Combine newly fetched deals with any still-valid cached deals
+                let all_deals = if let Some((existing, _)) =
+                    queries::get_current_deals(&state.pool, location.id).await?
+                {
+                    let existing_names: HashSet<String> =
+                        existing.iter().map(|deal| deal.item_name.clone()).collect();
+                    let mut combined = existing;
+                    for deal in new_deals {
+                        if !existing_names.contains(&deal.item_name) {
+                            combined.push(deal);
+                        }
+                    }
+                    combined
+                } else {
+                    new_deals
+                };
+
+                state.resolve_deals_hash(location.id, &week_id, &all_deals);
                 drop(guard);
-                return Ok((deals, week_id, false));
+                return Ok((all_deals, week_id, false));
             }
         }
     }
+}
+
+/// Separate deals into valid and expired, returning the expired week_ids.
+fn partition_expired_deals(deals: Vec<Deal>) -> (Vec<Deal>, Vec<String>) {
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let mut valid = Vec::new();
+    let mut expired_week_ids = std::collections::HashSet::new();
+
+    for deal in deals {
+        let is_expired = deal.valid_to.as_ref().map_or(false, |valid_to| {
+            let date_part = valid_to.split('T').next().unwrap_or(valid_to);
+            date_part < today.as_str()
+        });
+
+        if is_expired {
+            expired_week_ids.insert(deal.week_id.clone());
+        } else {
+            valid.push(deal);
+        }
+    }
+
+    (valid, expired_week_ids.into_iter().collect())
 }
 
 /// Dispatches to the appropriate fetch strategy (Flipp or Vision).
@@ -396,17 +448,51 @@ async fn fetch_and_cache_hmart_deals(
     state: &AppState,
     location: &StoreLocation,
 ) -> Result<(Vec<Deal>, String), AppError> {
-    let (deal_tuples, week_id) = hmart::fetch_hmart_deals(state, location).await?;
+    let result = hmart::fetch_hmart_deals(state, location).await?;
 
-    if deal_tuples.is_empty() {
-        return Ok((vec![], week_id));
+    // Save weekly deals
+    if !result.weekly_deals.is_empty() {
+        queries::save_deals(
+            &state.pool,
+            location.id,
+            &result.weekly_week_id,
+            &result.weekly_deals,
+            Some(&result.weekly_valid_from),
+            Some(&result.weekly_valid_to),
+        )
+        .await?;
     }
 
-    queries::save_deals(&state.pool, location.id, &week_id, &deal_tuples, None, None).await?;
+    // Save monthly deals separately (if any)
+    if !result.monthly_deals.is_empty() {
+        if let Some(monthly_week_id) = &result.monthly_week_id {
+            let today = chrono::Utc::now().date_naive();
+            let month_start = today
+                .with_day(1)
+                .map(|date: chrono::NaiveDate| date.format("%Y-%m-%dT00:00:00").to_string());
+            let month_end = today
+                .with_day(1)
+                .and_then(|date: chrono::NaiveDate| date.checked_add_months(chrono::Months::new(1)))
+                .map(|date| date.pred_opt().unwrap_or(date))
+                .map(|date| date.format("%Y-%m-%dT23:59:59").to_string());
 
-    let deals = queries::get_cached_deals(&state.pool, location.id, &week_id)
+            queries::save_deals(
+                &state.pool,
+                location.id,
+                monthly_week_id,
+                &result.monthly_deals,
+                month_start.as_deref(),
+                month_end.as_deref(),
+            )
+            .await?;
+        }
+    }
+
+    // Return all deals combined
+    let all_deals = queries::get_current_deals(&state.pool, location.id)
         .await?
+        .map(|(deals, _)| deals)
         .unwrap_or_default();
 
-    Ok((deals, week_id))
+    Ok((all_deals, result.weekly_week_id))
 }

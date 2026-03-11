@@ -128,41 +128,50 @@ pub async fn invalidate_all_deals_for_location(
     Ok(())
 }
 
-/// Get the most recent deals for a location regardless of week_id.
-/// Returns `Some((deals, week_id))` if any exist, `None` if empty.
+/// Get all current (non-expired) deals for a location across all week_ids.
+/// Returns `Some((deals, primary_week_id))` if any exist, `None` if empty.
+/// The primary_week_id is from the most recently fetched batch (used for hash caching).
 pub async fn get_current_deals(
     pool: &SqlitePool,
     location_id: i64,
 ) -> Result<Option<(Vec<Deal>, String)>, AppError> {
-    let first = sqlx::query!(
-        "SELECT DISTINCT week_id FROM deals WHERE location_id = ? ORDER BY fetched_at DESC LIMIT 1",
+    let all_deals = sqlx::query_as!(
+        Deal,
+        r#"SELECT id as "id!", location_id as "location_id!", week_id, item_name, brand,
+           deal_description, category, image_url, valid_from, valid_to, fetched_at
+           FROM deals WHERE location_id = ?
+           ORDER BY category, item_name"#,
         location_id
     )
-    .fetch_optional(pool)
+    .fetch_all(pool)
     .await?;
 
-    let week_id = match first {
-        Some(row) => row.week_id,
-        None => return Ok(None),
-    };
-
-    match get_cached_deals(pool, location_id, &week_id).await? {
-        Some(deals) => Ok(Some((deals, week_id))),
-        None => Ok(None),
+    if all_deals.is_empty() {
+        return Ok(None);
     }
+
+    let primary_week_id = all_deals
+        .first()
+        .map(|deal| deal.week_id.clone())
+        .unwrap_or_default();
+
+    Ok(Some((all_deals, primary_week_id)))
 }
 
-/// Check if deals are still valid based on their valid_to date.
-/// Returns true if any deal has a valid_to in the past.
+/// Check if ALL deals in the slice are expired based on their valid_to date.
+/// Returns true only if every deal with a valid_to has expired.
+/// Deals without valid_to are considered non-expired.
 pub fn are_deals_expired(deals: &[Deal]) -> bool {
+    if deals.is_empty() {
+        return false;
+    }
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    deals.first().and_then(|deal| deal.valid_to.as_ref()).map_or(
-        false,
-        |valid_to| {
+    deals.iter().all(|deal| {
+        deal.valid_to.as_ref().map_or(false, |valid_to| {
             let date_part = valid_to.split('T').next().unwrap_or(valid_to);
             date_part < today.as_str()
-        },
-    )
+        })
+    })
 }
 
 pub async fn save_deals(
