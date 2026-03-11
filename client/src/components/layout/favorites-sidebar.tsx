@@ -76,7 +76,11 @@ export const FavoritesSidebar: React.FC<IFavoritesSidebarProps> = ({ onNavigate 
 
                 {favorites.length > 0 && <Divider sx={{ my: 0.5 }} />}
 
-                {favorites.map((favorite) => {
+                {[...favorites]
+                    .sort((a, b) =>
+                        a.zipCode.localeCompare(b.zipCode) || displayChainName(a.chainId).localeCompare(displayChainName(b.chainId))
+                    )
+                    .map((favorite) => {
                     const isActive =
                         favorite.chainId === activeLocation?.chain &&
                         favorite.zipCode === activeLocation?.zip;
