@@ -180,6 +180,8 @@ async fn extract_hmart_deals_with_dates(
                      1. The valid date range (e.g., \"03/06\" to \"03/12\", or \"March 6\" to \"March 12\"). \
                         Include the year if shown, otherwise assume the current year.\n\
                      2. All grocery deals with item name, brand (if shown), and deal description (price or discount).\n\n\
+                     For deal_description, always include the dollar sign for prices (e.g., \"$2.99/lb\", \"$5.99\", \"2 for $5\", \"Buy 1 Get 1 Free\"). \
+                     Read prices carefully from the image — make sure you're reading the correct price for each item.\n\n\
                      Respond with ONLY a JSON object in this format:\n\
                      {\n\
                        \"valid_from\": \"YYYYMMDD\",\n\
@@ -321,7 +323,7 @@ async fn fetch_hmart_deal_image_url(client: &reqwest::Client) -> Result<String, 
                 let url = if url.contains('?') {
                     url
                 } else {
-                    format!("{}?format=1500w", url)
+                    format!("{}?format=2500w", url)
                 };
                 tracing::info!("Found H Mart English flyer image via pattern: {}", pattern.as_str());
                 return Ok(url);
