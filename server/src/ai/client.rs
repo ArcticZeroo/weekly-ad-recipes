@@ -83,30 +83,58 @@ impl AnthropicClient {
             }],
         };
 
-        let response = self
-            .http
-            .post(ANTHROPIC_API_URL)
-            .header("x-api-key", &self.api_key)
-            .header("anthropic-version", ANTHROPIC_VERSION)
-            .header("content-type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
+        let request_body = serde_json::to_vec(&request).map_err(|error| {
+            AppError::Ai(format!("Failed to serialize request: {error}"))
+        })?;
 
-        let status = response.status();
-        if !status.is_success() {
+        let mut last_error = None;
+
+        for attempt in 0..3 {
+            if attempt > 0 {
+                let delay = std::time::Duration::from_millis(1000 * 2u64.pow(attempt as u32 - 1));
+                tracing::info!(
+                    "Retrying Anthropic API call (attempt {}, waiting {}ms)",
+                    attempt + 1,
+                    delay.as_millis()
+                );
+                tokio::time::sleep(delay).await;
+            }
+
+            let response = self
+                .http
+                .post(ANTHROPIC_API_URL)
+                .header("x-api-key", &self.api_key)
+                .header("anthropic-version", ANTHROPIC_VERSION)
+                .header("content-type", "application/json")
+                .body(request_body.clone())
+                .send()
+                .await?;
+
+            let status = response.status();
+            if status.is_success() {
+                let response: MessageResponse = response.json().await?;
+                return response
+                    .content
+                    .into_iter()
+                    .find_map(|block| block.text)
+                    .ok_or_else(|| AppError::Ai("No text in AI response".to_string()));
+            }
+
             let body = response.text().await.unwrap_or_default();
-            return Err(AppError::Ai(format!(
-                "Anthropic API returned {status}: {body}"
-            )));
+            let error_message = format!(
+                "Anthropic API returned {status} (model: {model}, request: {} bytes): {body}",
+                request_body.len()
+            );
+
+            if status.is_server_error() || status.as_u16() == 429 {
+                tracing::warn!("{error_message}");
+                last_error = Some(error_message);
+                continue;
+            }
+
+            return Err(AppError::Ai(error_message));
         }
 
-        let response: MessageResponse = response.json().await?;
-
-        response
-            .content
-            .into_iter()
-            .find_map(|block| block.text)
-            .ok_or_else(|| AppError::Ai("No text in AI response".to_string()))
+        Err(AppError::Ai(last_error.unwrap_or_else(|| "Anthropic API failed after retries".into())))
     }
 }
