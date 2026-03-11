@@ -150,7 +150,6 @@ async fn main() {
             post(routes::deals::refresh_deals),
         )
         .route("/api/meals/:chain/:zip", get(routes::meals::get_meals))
-        .nest_service("/api/thumbnails", ServeDir::new("data/thumbnails"))
         .fallback_service(
             ServeDir::new("../client/dist")
                 .not_found_service(ServeFile::new("../client/dist/index.html")),
