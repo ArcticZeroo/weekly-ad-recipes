@@ -288,11 +288,13 @@ async fn fetch_hmart_deal_image_url(client: &reqwest::Client) -> Result<String, 
         .text()
         .await?;
 
+    tracing::debug!("H Mart page HTML length: {} chars", html.len());
+
+    // Try multiple patterns to find the English flyer image
     let patterns = [
         Regex::new(r#"data-image="([^"]*Weekly_eng[^"]*)""#).unwrap(),
         Regex::new(r#"data-src="([^"]*Weekly_eng[^"]*)""#).unwrap(),
-        Regex::new(r#"data-image="([^"]*HMart\+Weekly_eng[^"]*)""#).unwrap(),
-        Regex::new(r#"data-src="([^"]*HMart\+Weekly_eng[^"]*)""#).unwrap(),
+        Regex::new(r#"src="([^"]*Weekly_eng[^"]*)""#).unwrap(),
     ];
 
     for pattern in &patterns {
@@ -304,9 +306,24 @@ async fn fetch_hmart_deal_image_url(client: &reqwest::Client) -> Result<String, 
                 } else {
                     format!("{}?format=1500w", url)
                 };
+                tracing::info!("Found H Mart English flyer image via pattern: {}", pattern.as_str());
                 return Ok(url);
             }
         }
+    }
+
+    // Log what images we did find to help debug
+    let all_images = Regex::new(r#"data-image="([^"]*)""#).unwrap();
+    let found_images: Vec<&str> = all_images
+        .captures_iter(&html)
+        .filter_map(|capture| capture.get(1).map(|matched| matched.as_str()))
+        .collect();
+    tracing::warn!(
+        "Could not find English weekly ad image. Found {} data-image URLs on page:",
+        found_images.len()
+    );
+    for (index, url) in found_images.iter().enumerate() {
+        tracing::warn!("  [{}] {}", index, url);
     }
 
     Err(AppError::Internal(
