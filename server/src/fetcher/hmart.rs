@@ -512,7 +512,7 @@ fn extract_json_object(text: &str) -> &str {
 }
 
 fn detect_image_media_type(bytes: &[u8]) -> &'static str {
-    if bytes.starts_with(b"RIFF") && bytes.len() > 12 && &bytes[8..12] == b"WEBP" {
+    if bytes.starts_with(b"RIFF") && bytes.len() >= 12 && &bytes[8..12] == b"WEBP" {
         "image/webp"
     } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
         "image/jpeg"
@@ -526,12 +526,28 @@ fn detect_image_media_type(bytes: &[u8]) -> &'static str {
 }
 
 /// Crop deal thumbnails from the flyer image based on grid positions from Vision.
-/// Saves each crop to `data/thumbnails/{hash}.jpg` and returns a map of deal_index → URL path.
+/// Saves each crop to `{base_path}/{hash}.jpg` and returns a map of deal_index → URL path.
 fn crop_and_save_thumbnails(
     image_bytes: &[u8],
     grid_rows: u32,
     grid_cols: u32,
     deal_positions: &[(usize, u32, u32)],
+) -> std::collections::HashMap<usize, String> {
+    crop_and_save_thumbnails_to(
+        image_bytes,
+        grid_rows,
+        grid_cols,
+        deal_positions,
+        std::path::Path::new("data/thumbnails"),
+    )
+}
+
+fn crop_and_save_thumbnails_to(
+    image_bytes: &[u8],
+    grid_rows: u32,
+    grid_cols: u32,
+    deal_positions: &[(usize, u32, u32)],
+    thumbnail_directory: &std::path::Path,
 ) -> std::collections::HashMap<usize, String> {
     let mut result = std::collections::HashMap::new();
 
@@ -548,7 +564,6 @@ fn crop_and_save_thumbnails(
     let cell_width = width / grid_cols;
     let cell_height = height / grid_rows;
 
-    let thumbnail_directory = std::path::Path::new("data/thumbnails");
     if let Err(error) = std::fs::create_dir_all(thumbnail_directory) {
         tracing::warn!("Failed to create thumbnail directory: {error}");
         return result;
@@ -787,6 +802,102 @@ mod tests {
         let zip_geo = test_zip_geo();
         let result = find_nearest_hmart_wa_store(&zip_geo, "00000");
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn detect_jpeg_media_type() {
+        assert_eq!(detect_image_media_type(&[0xFF, 0xD8, 0xFF, 0xE0]), "image/jpeg");
+    }
+
+    #[test]
+    fn detect_png_media_type() {
+        assert_eq!(detect_image_media_type(&[0x89, 0x50, 0x4E, 0x47, 0x0D]), "image/png");
+    }
+
+    #[test]
+    fn detect_webp_media_type() {
+        let mut bytes = b"RIFF".to_vec();
+        bytes.extend_from_slice(&[0x00; 4]); // file size
+        bytes.extend_from_slice(b"WEBP");
+        assert_eq!(detect_image_media_type(&bytes), "image/webp");
+    }
+
+    #[test]
+    fn detect_unknown_defaults_to_jpeg() {
+        assert_eq!(detect_image_media_type(&[0x00, 0x01, 0x02]), "image/jpeg");
+    }
+
+    #[test]
+    fn crop_thumbnails_from_synthetic_image() {
+        let image = image::RgbImage::from_fn(400, 300, |x, y| {
+            let row = if y < 150 { 0 } else { 1 };
+            let col = if x < 200 { 0 } else { 1 };
+            match (row, col) {
+                (0, 0) => image::Rgb([255, 0, 0]),
+                (0, 1) => image::Rgb([0, 255, 0]),
+                (1, 0) => image::Rgb([0, 0, 255]),
+                _ => image::Rgb([255, 255, 0]),
+            }
+        });
+
+        let mut png_bytes = Vec::new();
+        image::DynamicImage::ImageRgb8(image)
+            .write_to(&mut std::io::Cursor::new(&mut png_bytes), image::ImageFormat::Png)
+            .unwrap();
+
+        let positions = vec![
+            (0, 0, 0),
+            (1, 0, 1),
+            (2, 1, 0),
+        ];
+
+        let temp_directory = std::path::PathBuf::from("target/test_thumbnails_synthetic");
+        let _ = std::fs::remove_dir_all(&temp_directory);
+
+        let result = crop_and_save_thumbnails_to(&png_bytes, 2, 2, &positions, &temp_directory);
+
+        let _ = std::fs::remove_dir_all(&temp_directory);
+
+        assert_eq!(result.len(), 3, "Should produce 3 thumbnails");
+        assert!(result.contains_key(&0));
+        assert!(result.contains_key(&1));
+        assert!(result.contains_key(&2));
+
+        for url in result.values() {
+            assert!(url.starts_with("/api/thumbnails/"), "URL should start with /api/thumbnails/, got: {url}");
+            assert!(url.ends_with(".jpg"), "URL should end with .jpg, got: {url}");
+        }
+    }
+
+    #[test]
+    fn crop_thumbnails_skips_out_of_bounds_positions() {
+        let image = image::RgbImage::from_fn(200, 200, |_, _| image::Rgb([128, 128, 128]));
+        let mut png_bytes = Vec::new();
+        image::DynamicImage::ImageRgb8(image)
+            .write_to(&mut std::io::Cursor::new(&mut png_bytes), image::ImageFormat::Png)
+            .unwrap();
+
+        let positions = vec![
+            (0, 0, 0),
+            (1, 10, 10),
+        ];
+
+        let temp_directory = std::path::PathBuf::from("target/test_thumbnails_oob");
+        let _ = std::fs::remove_dir_all(&temp_directory);
+
+        let result = crop_and_save_thumbnails_to(&png_bytes, 2, 2, &positions, &temp_directory);
+
+        let _ = std::fs::remove_dir_all(&temp_directory);
+
+        assert_eq!(result.len(), 1, "Should only produce 1 thumbnail (out-of-bounds skipped)");
+        assert!(result.contains_key(&0));
+        assert!(!result.contains_key(&1));
+    }
+
+    #[test]
+    fn crop_thumbnails_handles_invalid_image() {
+        let result = crop_and_save_thumbnails(b"not an image", 2, 2, &[(0, 0, 0)]);
+        assert!(result.is_empty(), "Should return empty map for invalid image");
     }
 }
 

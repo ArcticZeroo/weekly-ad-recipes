@@ -19,6 +19,16 @@ const MealsPage: React.FC = () => {
 
     const response = useImmediatePromiseState(retrieveMeals);
 
+    const dealMap = useMemo(() => {
+        const map = new Map<number, Deal>();
+        if (response.value != null) {
+            for (const deal of response.value.deals) {
+                map.set(deal.id, deal);
+            }
+        }
+        return map;
+    }, [response.value?.deals]);
+
     if (response.stage === PromiseStage.error) {
         return <ErrorCard message="Unable to load meal ideas." onRetry={response.run} />;
     }
@@ -70,15 +80,7 @@ const MealsPage: React.FC = () => {
         );
     }
 
-    const { meals, valid_from: validFrom, valid_to: validTo, deals: responseDealsList, cached } = response.value;
-
-    const dealMap = useMemo(() => {
-        const map = new Map<number, Deal>();
-        for (const deal of responseDealsList) {
-            map.set(deal.id, deal);
-        }
-        return map;
-    }, [responseDealsList]);
+    const { meals, valid_from: validFrom, valid_to: validTo, cached } = response.value;
 
     if (meals.length === 0) {
         return (

@@ -45,3 +45,6 @@ regex = "1"
 chromiumoxide = { version = "0.5", features = ["tokio-runtime"], default-features = false }
 # Image processing (deal thumbnail cropping)
 image = { version = "0.25", default-features = false, features = ["jpeg", "webp", "png"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
